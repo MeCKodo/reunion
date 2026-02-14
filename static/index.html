@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cursor 对话检索 MVP</title>
+    <style>
+      :root {
+        --bg: #0c1018;
+        --panel: #141b26;
+        --panel-2: #101722;
+        --text: #e9eef7;
+        --muted: #94a3b8;
+        --line: #243041;
+        --accent: #5aa2ff;
+        --accent-soft: #1c2d47;
+        --ok: #7adba6;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at 20% -10%, #1a2a44, #0c1018 36%, #0b1119 100%);
+      }
+      .wrap {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+      .toolbar {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(11, 17, 25, 0.88);
+        backdrop-filter: blur(8px);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      input, select, button {
+        border: 1px solid var(--line);
+        background: #111a27;
+        color: var(--text);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 14px;
+      }
+      input { width: 360px; }
+      button.primary {
+        background: var(--accent);
+        color: #0b1220;
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+      button:hover { opacity: 0.92; }
+      .layout {
+        display: grid;
+        grid-template-columns: 42% 58%;
+        height: calc(100vh - 58px);
+      }
+      .left, .right {
+        overflow: auto;
+        padding: 14px;
+      }
+      .left {
+        border-right: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(12, 17, 26, 0.96), rgba(11, 15, 23, 0.96));
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: border-color 0.16s ease, transform 0.12s ease, background 0.16s ease;
+      }
+      .card:hover {
+        border-color: #3f5f8e;
+        transform: translateY(-1px);
+        background: #172131;
+      }
+      .card.active {
+        border-color: var(--accent);
+        background: #1a2a43;
+      }
+      .repo {
+        display: inline-block;
+        font-size: 12px;
+        color: #b8d5ff;
+        background: #22344f;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .meta {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .snippet {
+        margin-top: 8px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #d8e2f0;
+      }
+      .actions {
+        margin-top: 10px;
+        display: flex;
+        justify-content: flex-end;
+      }
+      .mini-btn {
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        background: var(--accent-soft);
+        border-color: #32507a;
+      }
+      .mini-btn:hover { border-color: var(--accent); }
+      mark {
+        background: #ffce66;
+        color: #2a1d00;
+        border-radius: 4px;
+        padding: 0 2px;
+      }
+      pre {
+        background: var(--panel-2);
+        color: #e5eefb;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.45;
+        font-size: 13px;
+        margin-top: 8px;
+      }
+      .muted { color: var(--muted); }
+      .logo {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+        margin-right: 10px;
+        color: #cbe0ff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="toolbar">
+        <div class="logo">Codex Chat Explorer</div>
+        <input id="q" placeholder="搜索关键词（支持中英文）" />
+        <select id="repo"></select>
+        <select id="days">
+          <option value="0">全部时间</option>
+          <option value="7">最近7天</option>
+          <option value="30">最近30天</option>
+          <option value="60">最近60天</option>
+          <option value="90">最近90天</option>
+        </select>
+        <button class="primary" id="searchBtn">搜索</button>
+        <button id="reindexBtn">重建索引</button>
+        <span class="muted" id="status"></span>
+      </div>
+
+      <div class="layout">
+        <div class="left" id="results"></div>
+        <div class="right">
+          <div id="detailMeta" class="muted">点击左侧会话查看详情</div>
+          <pre id="detail"></pre>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const qEl = document.getElementById("q");
+      const repoEl = document.getElementById("repo");
+      const daysEl = document.getElementById("days");
+      const resultsEl = document.getElementById("results");
+      const detailEl = document.getElementById("detail");
+      const detailMetaEl = document.getElementById("detailMeta");
+      const statusEl = document.getElementById("status");
+      let activeSessionKey = "";
+
+      function fmtTs(ts) {
+        if (!ts) return "-";
+        return new Date(ts * 1000).toLocaleString();
+      }
+
+      async function loadRepos() {
+        const res = await fetch("/api/repos");
+        const data = await res.json();
+        repoEl.innerHTML = "";
+
+        const all = document.createElement("option");
+        all.value = "";
+        all.textContent = "全部 Repo";
+        repoEl.appendChild(all);
+
+        for (const item of data.repos) {
+          const opt = document.createElement("option");
+          opt.value = item.repo;
+          opt.textContent = `${item.repo} (${item.session_count})`;
+          repoEl.appendChild(opt);
+        }
+      }
+
+      async function search() {
+        statusEl.textContent = "查询中...";
+        const q = encodeURIComponent(qEl.value.trim());
+        const repo = encodeURIComponent(repoEl.value);
+        const days = encodeURIComponent(daysEl.value || "0");
+        const res = await fetch(`/api/search?q=${q}&repo=${repo}&days=${days}&limit=200`);
+        const data = await res.json();
+        renderResults(data.results || []);
+        statusEl.textContent = `结果 ${data.count || 0} 条`;
+      }
+
+      function renderResults(items) {
+        resultsEl.innerHTML = "";
+        if (!items.length) {
+          resultsEl.innerHTML = '<p class="muted">没有匹配结果</p>';
+          return;
+        }
+
+        for (const item of items) {
+          const card = document.createElement("div");
+          card.className = "card";
+          if (item.session_key === activeSessionKey) {
+            card.classList.add("active");
+          }
+          card.innerHTML = `
+            <div><span class="repo">${item.repo}</span></div>
+            <div class="meta">${item.session_id} · ${fmtTs(item.updated_at)}</div>
+            <div class="snippet">${item.snippet || ""}</div>
+            <div class="actions">
+              <button class="mini-btn open-file-btn" data-session-key="${item.session_key}">打开原文件</button>
+            </div>
+          `;
+          card.addEventListener("click", () => openSession(item.session_key));
+          const openBtn = card.querySelector(".open-file-btn");
+          openBtn.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            await openSourceFile(item.session_key);
+          });
+          resultsEl.appendChild(card);
+        }
+      }
+
+      async function openSession(sessionKey) {
+        activeSessionKey = sessionKey;
+        const res = await fetch(`/api/session/${encodeURIComponent(sessionKey)}`);
+        if (!res.ok) {
+          detailMetaEl.textContent = "会话读取失败";
+          detailEl.textContent = "";
+          return;
+        }
+        const item = await res.json();
+        detailMetaEl.textContent = `${item.repo} · ${item.session_id} · ${fmtTs(item.updated_at)} · ${item.file_path}`;
+        detailEl.textContent = item.content || "";
+        await search();
+      }
+
+      async function reindex() {
+        statusEl.textContent = "索引构建中...";
+        const res = await fetch("/api/reindex", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          statusEl.textContent = `索引失败：${data.error || "unknown"}`;
+          return;
+        }
+        statusEl.textContent = `索引完成：${data.stats.sessions_indexed} sessions`;
+        await loadRepos();
+        await search();
+      }
+
+      async function openSourceFile(sessionKey) {
+        const res = await fetch(`/api/open-file/${encodeURIComponent(sessionKey)}`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          statusEl.textContent = `打开失败：${data.error || "unknown"}`;
+          return;
+        }
+        statusEl.textContent = "已打开原文件";
+      }
+
+      document.getElementById("searchBtn").addEventListener("click", search);
+      document.getElementById("reindexBtn").addEventListener("click", reindex);
+      daysEl.addEventListener("change", search);
+      repoEl.addEventListener("change", search);
+      qEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") search();
+      });
+
+      (async function boot() {
+        await loadRepos();
+        await search();
+      })();
+    </script>
+  </body>
+</html>
