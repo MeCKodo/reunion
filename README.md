@@ -21,6 +21,10 @@ npm run serve
 打开：
 - `http://127.0.0.1:8765`
 
+## GitHub
+- 仓库：`https://github.com/MeCKodo/mvp-chat-explorer`
+- 默认分支：`main`
+
 ## 功能
 - 全 repo 会话列表
 - 关键词检索（中英文）
