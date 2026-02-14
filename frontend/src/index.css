@@ -1,0 +1,60 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 220 14% 9%;
+  --foreground: 216 18% 90%;
+  --card: 222 16% 14%;
+  --card-foreground: 210 22% 94%;
+  --primary: 211 94% 67%;
+  --primary-foreground: 222 26% 10%;
+  --secondary: 220 12% 21%;
+  --secondary-foreground: 214 19% 90%;
+  --muted: 220 11% 24%;
+  --muted-foreground: 218 10% 70%;
+  --border: 220 10% 29%;
+  --input: 220 11% 29%;
+  --ring: 211 94% 67%;
+  --radius: 0.68rem;
+}
+
+* {
+  @apply border-border;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 12% -12%, #243244 0%, #171b22 36%, #13171d 100%);
+  overflow: hidden;
+}
+
+.transcript-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.62;
+}
+
+code,
+pre {
+  font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
