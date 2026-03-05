@@ -198,9 +198,48 @@ async function getProjectDirs(sourceRoot: string): Promise<string[]> {
   return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 }
 
+function normalizeRole(role: string): Role {
+  if (role === "user") return "user";
+  if (role === "assistant") return "assistant";
+  return "system";
+}
+
+function stringifyJsonlContent(raw: string): string {
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const line of lines) {
+    try {
+      const row = JSON.parse(line) as {
+        role?: string;
+        message?: { content?: Array<{ type?: string; text?: string }> };
+      };
+      const role = normalizeRole(row.role || "system");
+      const text = (row.message?.content || [])
+        .filter((item) => item && item.type === "text" && typeof item.text === "string")
+        .map((item) => item.text || "")
+        .join("\n")
+        .trim();
+      if (!text) continue;
+      out.push(`${role}:`);
+      out.push(text);
+      out.push("");
+    } catch {
+      continue;
+    }
+  }
+  return out.join("\n").trim();
+}
+
+async function readTranscriptContent(filePath: string): Promise<string> {
+  const raw = await fs.readFile(filePath, "utf-8");
+  if (path.extname(filePath).toLowerCase() !== ".jsonl") return raw;
+  const parsed = stringifyJsonlContent(raw);
+  return parsed || raw;
+}
+
 async function collectTranscriptFiles(sourceRoot: string): Promise<string[]> {
   const projectDirs = await getProjectDirs(sourceRoot);
-  const allFiles: string[] = [];
+  const bySession = new Map<string, { filePath: string; mtimeMs: number }>();
 
   await Promise.all(
     projectDirs.map(async (projectDir) => {
@@ -209,7 +248,30 @@ async function collectTranscriptFiles(sourceRoot: string): Promise<string[]> {
         const entries = await fs.readdir(transcriptDir, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isFile() && entry.name.endsWith(".txt")) {
-            allFiles.push(path.join(transcriptDir, entry.name));
+            const filePath = path.join(transcriptDir, entry.name);
+            const stat = await fs.stat(filePath);
+            const sessionId = path.basename(filePath, ".txt");
+            const sessionKey = `${projectDir}:${sessionId}`;
+            const prev = bySession.get(sessionKey);
+            if (!prev || stat.mtimeMs >= prev.mtimeMs) {
+              bySession.set(sessionKey, { filePath, mtimeMs: stat.mtimeMs });
+            }
+            continue;
+          }
+          if (entry.isDirectory()) {
+            const nestedDir = path.join(transcriptDir, entry.name);
+            const nestedEntries = await fs.readdir(nestedDir, { withFileTypes: true });
+            for (const nested of nestedEntries) {
+              if (!nested.isFile() || !nested.name.endsWith(".jsonl")) continue;
+              const filePath = path.join(nestedDir, nested.name);
+              const stat = await fs.stat(filePath);
+              const sessionId = path.basename(filePath, ".jsonl");
+              const sessionKey = `${projectDir}:${sessionId}`;
+              const prev = bySession.get(sessionKey);
+              if (!prev || stat.mtimeMs >= prev.mtimeMs) {
+                bySession.set(sessionKey, { filePath, mtimeMs: stat.mtimeMs });
+              }
+            }
           }
         }
       } catch {
@@ -218,7 +280,7 @@ async function collectTranscriptFiles(sourceRoot: string): Promise<string[]> {
     })
   );
 
-  return allFiles;
+  return Array.from(bySession.values()).map((item) => item.filePath);
 }
 
 async function buildIndex(sourceRootInput: string): Promise<ReindexStats> {
@@ -233,9 +295,11 @@ async function buildIndex(sourceRootInput: string): Promise<ReindexStats> {
     files.map(async (filePath) => {
       try {
         const stat = await fs.stat(filePath);
-        const content = await fs.readFile(filePath, "utf-8");
-        const sessionId = path.basename(filePath, ".txt");
-        const repo = path.basename(path.dirname(path.dirname(filePath)));
+        const content = await readTranscriptContent(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        const sessionId = path.basename(filePath, ext);
+        const relParts = path.relative(sourceRoot, filePath).split(path.sep).filter(Boolean);
+        const repo = relParts[0] || path.basename(path.dirname(path.dirname(filePath)));
         const meta = composerMeta.get(sessionId);
         const mtime = Math.floor(stat.mtimeMs / 1000);
         const fallbackStart = Math.floor((stat.birthtimeMs || stat.mtimeMs) / 1000);
