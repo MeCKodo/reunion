@@ -1,0 +1,88 @@
+appId: com.meckodo.logue
+productName: Logue
+copyright: Copyright (c) 2026 MeCKodo
+asar: true
+
+directories:
+  output: release
+  buildResources: build
+
+# Hook used to ad-hoc sign the entire .app bundle after packaging.
+# electron-builder's `identity: null` skips signing completely, so Apple
+# Silicon Gatekeeper rejects the app with "no resources but signature
+# indicates they must be present". The hook fixes that for free.
+afterPack: scripts/after-pack.cjs
+
+# Files included inside app.asar.
+# We only ship the compiled backend / electron main and the production
+# node_modules. The frontend build output is shipped via extraResources
+# instead so it can be served as plain static assets at runtime.
+files:
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/{.DS_Store,Thumbs.db}"
+  - "!frontend/**/*"
+  - "!data/**/*"
+  - "!static/**/*"
+  - "!release/**/*"
+  - "!**/*.tsbuildinfo"
+  - "!{tsconfig*.json,electron-builder.yml,*.html,*.py}"
+  - "!{AGENTS.md,README.md,QUICK_START_DMG.md,FIRST_OPEN.md}"
+  - "!.cursor/**/*"
+  - "!.git/**/*"
+
+# Static assets shipped outside app.asar so the embedded HTTP server can
+# read them with plain fs at runtime via process.resourcesPath.
+extraResources:
+  - from: frontend/dist
+    to: frontend/dist
+    filter:
+      - "**/*"
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  # ad-hoc sign on the local machine. No Apple Developer account needed.
+  # When upgrading to paid signing, set:
+  #   identity: "Developer ID Application: <Your Company> (TEAMID)"
+  #   hardenedRuntime: true
+  #   entitlements: build/entitlements.mac.plist
+  #   entitlementsInherit: build/entitlements.mac.plist
+  #   notarize:
+  #     teamId: TEAMID
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  notarize: false
+  # We ship two single-arch DMGs (arm64 + x64) instead of one universal
+  # build because the universal merger is sensitive to extraResources
+  # discrepancies between the two arch packagings. arm64 covers ~95%+ of
+  # current internal Macs; x64 is provided as a fallback.
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+
+dmg:
+  title: ${productName} ${version}
+  icon: build/icon.icns
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 140
+      y: 200
+      type: file
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications
+
+# Disable update server probing for the local-only build.
+publish: null

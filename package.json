@@ -1,18 +1,51 @@
 {
-  "name": "cursor-chat-explorer-mvp",
-  "version": "0.1.0",
+  "name": "logue",
+  "productName": "Logue",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
+  "main": "dist/electron/bootstrap.cjs",
+  "description": "Aggregate, search, read and export local Cursor / Claude Code / Codex agent chats.",
+  "author": "MeCKodo",
   "scripts": {
     "index": "tsx src/server.ts index",
-    "serve": "tsx src/server.ts serve --port 8765",
-    "build:frontend": "npm --prefix frontend run build",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js"
+    "serve": "tsx src/server.ts serve --port 9765",
+    "build:frontend": "pnpm -C frontend run build",
+    "build:backend": "node scripts/build-electron.mjs",
+    "build": "pnpm run build:frontend && pnpm run build:backend",
+    "start": "node dist/src/server.cjs",
+    "electron": "pnpm run build && electron .",
+    "dist:mac": "pnpm run build && electron-builder --mac --config electron-builder.yml",
+    "dist:mac:arm64": "pnpm run build && electron-builder --mac --arm64 --config electron-builder.yml",
+    "dist:mac:x64": "pnpm run build && electron-builder --mac --x64 --config electron-builder.yml",
+    "release": "bash scripts/release.sh",
+    "release:patch": "bash scripts/release.sh --bump patch",
+    "release:minor": "bash scripts/release.sh --bump minor",
+    "release:draft": "bash scripts/release.sh --draft"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "better-sqlite3": "^12.9.0",
+    "fix-path": "^5.0.0",
+    "onnxruntime-node": "^1.24.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
-    "@types/node": "^22.10.2"
+    "wait-on": "^9.0.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "electron",
+      "esbuild",
+      "onnxruntime-node"
+    ]
   }
 }
