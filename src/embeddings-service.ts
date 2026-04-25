@@ -11,6 +11,7 @@ import {
 } from "./embeddings";
 import {
   cosineSimilarity,
+  countEmbeddings,
   findTopK,
   getEmbedding,
   getMissingHashes,
@@ -59,8 +60,7 @@ function setRebuild(patch: Partial<RebuildState>) {
 
 async function getStoredCount(): Promise<number> {
   try {
-    const all = await loadAllEmbeddings();
-    return all.length;
+    return await countEmbeddings();
   } catch {
     return 0;
   }
@@ -119,7 +119,12 @@ export function triggerRebuild(allPrompts: PromptEntry[]): void {
         setRebuild({ status: "done", finishedAt: Date.now() });
         return;
       }
-      const batchSize = 16;
+      // Smaller batches + an explicit `setImmediate` yield between them keeps
+      // /api/embeddings/status and other HTTP/IPC traffic responsive while
+      // ORT chews through the corpus. With batchSize=16 we'd block the JS
+      // thread for ~400-600ms per batch on M-series CPUs, long enough for
+      // polling (1s active interval) to skip a tick and the UI to feel stuck.
+      const batchSize = 8;
       for (let offset = 0; offset < todo.length; offset += batchSize) {
         const chunk = todo.slice(offset, offset + batchSize);
         const vectors = await embedBatch(
@@ -132,6 +137,9 @@ export function triggerRebuild(allPrompts: PromptEntry[]): void {
         }));
         await upsertEmbeddingsBatch(rows);
         setRebuild({ processed: alreadyDone + offset + chunk.length });
+        // Drain the microtask + macrotask queues so pending HTTP / IPC work
+        // gets served before we start the next ORT call.
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
       setRebuild({ status: "done", finishedAt: Date.now() });
     } catch (err) {

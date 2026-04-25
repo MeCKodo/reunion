@@ -153,6 +153,21 @@ export async function loadAllEmbeddings(
   }));
 }
 
+/**
+ * Cheap row count for `modelId`. Used by the status endpoint that polls every
+ * 1s during an active rebuild — `loadAllEmbeddings` here would re-decode every
+ * Float32Array on every poll and stall the main process.
+ */
+export async function countEmbeddings(
+  modelId: string = EMBEDDING_MODEL_ID
+): Promise<number> {
+  const db = await getEmbeddingsDb();
+  const row = db
+    .prepare("SELECT COUNT(*) AS c FROM embeddings WHERE model_id = ?")
+    .get(modelId) as { c: number } | undefined;
+  return row?.c ?? 0;
+}
+
 export async function getEmbedding(
   promptHash: string,
   modelId: string = EMBEDDING_MODEL_ID

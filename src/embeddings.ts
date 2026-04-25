@@ -192,6 +192,18 @@ export function ensureEmbedder(): Promise<EmbedderPipeline> {
         // q8 is the default for sentence-transformer ONNX exports and keeps
         // the download under 130MB while preserving recall.
         dtype: "q8",
+        // Cap the ORT thread pool. Without this onnxruntime-node defaults to
+        // `os.cpus().length`, which on M-series chips means 8-12 threads
+        // saturating every core during a rebuild and starving the renderer
+        // (visible as UI lag while encoding). Two intra-op threads is enough
+        // to keep ORT busy on a 33M-param sentence transformer; "sequential"
+        // execution mode disables the inter-op pool we don't need.
+        session_options: {
+          intraOpNumThreads: 2,
+          interOpNumThreads: 1,
+          executionMode: "sequential",
+          graphOptimizationLevel: "all",
+        },
       });
       setState({ status: "ready", progress: 1, readyAt: Date.now(), currentFile: undefined });
       return pipe;
