@@ -287,7 +287,7 @@ def run_server(host: str, port: int, source_root: Path):
 
     AppHandler.source_root = source_root
     server = ThreadingHTTPServer((host, port), AppHandler)
-    print(f"chat explorer running: http://{host}:{port}")
+    print(f"logue running: http://{host}:{port}")
     print(f"source_root: {source_root}")
     server.serve_forever()
 
@@ -301,7 +301,7 @@ def main():
 
     p_serve = sub.add_parser("serve", help="Run web server")
     p_serve.add_argument("--host", default="127.0.0.1")
-    p_serve.add_argument("--port", type=int, default=8765)
+    p_serve.add_argument("--port", type=int, default=9765)
     p_serve.add_argument("--source-root", default=str(DEFAULT_SOURCE_ROOT))
 
     args = parser.parse_args()
