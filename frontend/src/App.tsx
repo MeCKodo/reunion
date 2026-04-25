@@ -1,425 +1,560 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { ScrollToTop } from "@/components/shared/ScrollToTop";
+import { Sidebar } from "@/components/sidebar/Sidebar";
+import { SessionView } from "@/components/session-view/SessionView";
+import { useToast } from "@/components/ui/toast";
+import { useAnnotations } from "@/hooks/useAnnotations";
+import { usePersistentState } from "@/hooks/usePersistentState";
 import {
-  ArrowUp,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Clock3,
-  Download,
-  FileText,
-  Folder,
-  Loader2,
-  RefreshCw,
-  Search,
-  Sparkles,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-type SearchResult = {
-  session_key: string;
-  session_id: string;
-  repo: string;
-  title: string;
-  file_path: string;
-  started_at: number;
-  updated_at: number;
-  duration_sec: number;
-  size_bytes: number;
-  snippet: string;
-  match_count: number;
-  message_hits: Array<{
-    segment_index: number;
-    role: Role;
-    ts: number;
-    preview: string;
-  }>;
-};
-
-type SessionDetail = SearchResult & { content: string };
-type Role = "user" | "assistant" | "system";
-type Segment = { index: number; role: Role; text: string; ts: number };
-type RepoGroup = { repo: string; sessions: SearchResult[] };
-type MessageRoleFilter = "all" | "user" | "assistant";
-
-const DAY_OPTIONS = [
-  { value: "0", label: "All time" },
-  { value: "7", label: "Last 7d" },
-  { value: "30", label: "Last 30d" },
-  { value: "60", label: "Last 60d" },
-  { value: "90", label: "Last 90d" },
-];
-
-function prettifyRepoName(repo: string): string {
-  return repo.replace(/^Users-bytedance-/, "").replace(/^workspaces-/, "").replaceAll("-", " ");
-}
-
-function decodeEntities(text: string): string {
-  return text
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'");
-}
-
-function stripHtml(text: string): string {
-  return decodeEntities(text).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-}
-
-function tokenizeQuery(text: string): string[] {
-  const matches = text.match(/[A-Za-z0-9_\-\u4e00-\u9fff]+/g);
-  return Array.from(new Set((matches || []).map((item) => item.toLowerCase())));
-}
-
-function escapeRegex(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function renderHighlightedText(text: string, tokens: string[]) {
-  if (!tokens.length) return text;
-  const regex = new RegExp(`(${tokens.map((token) => escapeRegex(token)).join("|")})`, "gi");
-  const parts = text.split(regex);
-  return parts.map((part, index) => {
-    const matched = tokens.some((token) => part.toLowerCase() === token.toLowerCase());
-    if (!matched) return <Fragment key={`${part}-${index}`}>{part}</Fragment>;
-    return (
-      <mark key={`${part}-${index}`} className="rounded bg-[#f5cb5c]/55 px-0.5 text-[#1a1f2b]">
-        {part}
-      </mark>
-    );
-  });
-}
-
-function formatTs(ts: number): string {
-  return new Date(ts * 1000).toLocaleString();
-}
-
-function formatClock(ts: number): string {
-  return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDuration(durationSec: number): string {
-  const t = Math.max(0, durationSec);
-  const h = Math.floor(t / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  const s = t % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function relativeTime(ts: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const delta = Math.max(0, now - ts);
-  if (delta < 60) return `${delta}s`;
-  if (delta < 3600) return `${Math.floor(delta / 60)}m`;
-  if (delta < 86400) return `${Math.floor(delta / 3600)}h`;
-  if (delta < 86400 * 30) return `${Math.floor(delta / 86400)}d`;
-  return `${Math.floor(delta / (86400 * 30))}mo`;
-}
-
-function roleMeta(role: Role) {
-  if (role === "user") {
-    return {
-      label: "User",
-      wrapper: "justify-end",
-      bubble: "bg-[#43495a] border-[#5f6a80] text-[#f6f8fd]",
-      badge: "bg-[#556a92]/35 text-[#c8dafc] border-[#7a95c2]",
-    };
-  }
-  if (role === "assistant") {
-    return {
-      label: "Cursor",
-      wrapper: "justify-start",
-      bubble: "bg-[#1f2632] border-[#394358] text-[#e9eef8]",
-      badge: "bg-[#3f6b58]/35 text-[#c8f4e0] border-[#5a9679]",
-    };
-  }
-  return {
-    label: "System",
-    wrapper: "justify-start",
-    bubble: "bg-[#2d3442] border-[#485269] text-[#dde5f5]",
-    badge: "bg-[#5c677a]/30 text-[#dbe3f0] border-[#7a869d]",
-  };
-}
-
-function parseTranscript(content: string, startedAt: number, updatedAt: number): Segment[] {
-  const lines = content.split(/\r?\n/);
-  const segments: Segment[] = [];
-  let currentRole: Role = "system";
-  let buffer: string[] = [];
-
-  const flush = () => {
-    const text = buffer.join("\n").trim();
-    if (text) {
-      segments.push({ index: segments.length, role: currentRole, text, ts: startedAt });
-    }
-    buffer = [];
-  };
-
-  for (const line of lines) {
-    const marker = line.trim();
-    if (marker === "user:") {
-      flush();
-      currentRole = "user";
-      continue;
-    }
-    if (marker === "assistant:") {
-      flush();
-      currentRole = "assistant";
-      continue;
-    }
-    buffer.push(line);
-  }
-  flush();
-
-  if (segments.length === 0) {
-    return [{ index: 0, role: "system", text: content, ts: startedAt }];
-  }
-
-  const start = startedAt || updatedAt;
-  const end = updatedAt || startedAt;
-  const span = Math.max(0, end - start);
-  const step = segments.length > 1 ? span / (segments.length - 1) : 0;
-
-  return segments.map((segment, idx) => ({
-    ...segment,
-    index: idx,
-    ts: Math.floor(start + idx * step),
-  }));
-}
+  deleteSession,
+  downloadBlob,
+  fetchExport,
+  fetchRepos,
+  fetchSearch,
+  fetchSession,
+  fetchSources,
+  postReindex,
+  type ExportKind,
+} from "@/lib/api";
+import { decodeEntities } from "@/lib/format";
+import { eventSearchText, tokenizeQuery } from "@/lib/text";
+import {
+  isSubagentToolEvent,
+  toolCategory,
+  type ToolBucket,
+} from "@/lib/transcript";
+import type {
+  AppView,
+  DetailMessageHit,
+  HistoryMode,
+  MessageRoleFilter,
+  OpenSessionOptions,
+  PromptOccurrence,
+  RepoGroup,
+  RepoOption,
+  SearchResult,
+  SessionDetail,
+  SourceFilter,
+  SourceSummary,
+  TimelineEvent,
+} from "@/lib/types";
+import { buildHistoryPreview } from "@/lib/format";
+import {
+  getSessionKeyFromUrl,
+  getViewFromUrl,
+  syncSessionKeyToUrl,
+  syncViewToUrl,
+} from "@/lib/url";
+import { PromptsView } from "@/components/prompts/PromptsView";
 
 export default function App() {
+  // ── Core data state ────────────────────────────────────────────────
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [repoOptions, setRepoOptions] = useState<string[]>([]);
+  const [repoCatalog, setRepoCatalog] = useState<RepoOption[]>([]);
+  const [sourceSummaries, setSourceSummaries] = useState<SourceSummary[]>([]);
+  // Sidebar filter state is mirrored to localStorage so the user's choice
+  // (source tab, repo, time window, starred-only, tag filter) survives a
+  // reload. Stale values that no longer exist (e.g. a repo that's been
+  // removed) are reset by the existing reconciliation effects below.
+  const [selectedSource, setSelectedSource] = usePersistentState<SourceFilter>(
+    "filter:source",
+    "all"
+  );
   const [query, setQuery] = useState("");
-  const [days, setDays] = useState("30");
-  const [selectedRepo, setSelectedRepo] = useState("all");
+  const [days, setDays] = usePersistentState<string>("filter:days", "30");
+  const [selectedRepo, setSelectedRepo] = usePersistentState<string>(
+    "filter:repo",
+    "all"
+  );
   const [activeSessionKey, setActiveSessionKey] = useState("");
   const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
   const [status, setStatus] = useState("Ready");
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<"parsed" | "raw">("parsed");
+  const [firstLoad, setFirstLoad] = useState(true);
   const [messageRoleFilter, setMessageRoleFilter] = useState<MessageRoleFilter>("all");
   const [collapsedRepos, setCollapsedRepos] = useState<Record<string, boolean>>({});
   const [activeMatch, setActiveMatch] = useState(0);
-  const [pendingJumpSegment, setPendingJumpSegment] = useState<number | null>(null);
-  const [exportLoading, setExportLoading] = useState<"" | "rules" | "skill">("");
-  const segmentRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [pulseKey, setPulseKey] = useState(0);
+  const [pendingJumpTarget, setPendingJumpTarget] = useState<{
+    eventId?: string;
+    legacySegmentIndex?: number;
+  } | null>(null);
+  const [exportLoading, setExportLoading] = useState<"" | ExportKind>("");
+  const [onlyStarred, setOnlyStarred] = usePersistentState<boolean>(
+    "filter:starred",
+    false
+  );
+  const [selectedTags, setSelectedTags] = usePersistentState<string[]>(
+    "filter:tags",
+    []
+  );
+  const [tagInput, setTagInput] = useState("");
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Top-level view selector. Mirrored to ?view=prompts so the Prompts tab is
+  // shareable and survives reload. Sessions is the implicit default and never
+  // emits the param.
+  const [view, setView] = useState<AppView>(() => getViewFromUrl());
+  // Query that was actually submitted to the backend. Drives the sidebar
+  // "hits" badge, so we never show stale "0 hits" for an un-searched term.
+  const [submittedQuery, setSubmittedQuery] = useState("");
+
+  // Per-session search box, independent of the sidebar query. When non-empty
+  // it takes precedence over the global query for hit calculation and
+  // highlighting inside the open conversation, so users can pivot from
+  // "find this session" to "find inside this session" without losing their
+  // global search context.
+  const [inSessionQuery, setInSessionQuery] = useState("");
+
+  // ── Refs ───────────────────────────────────────────────────────────
+  const eventRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
+  const initialUrlSessionKeyRef = useRef(getSessionKeyFromUrl());
+  const didInitRef = useRef(false);
 
-  const queryTokens = useMemo(() => tokenizeQuery(query), [query]);
-  const activeResult = useMemo(
-    () => results.find((item) => item.session_key === activeSessionKey) || null,
-    [results, activeSessionKey]
+  // ── Toast helpers ──────────────────────────────────────────────────
+  const { push: pushToast, dismiss: dismissToast } = useToast();
+  const notify = useCallback(
+    (message: string, tone: Parameters<typeof pushToast>[1] = "default") => pushToast(message, tone),
+    [pushToast]
   );
 
-  const parsedSegments = useMemo(
-    () => (detail ? parseTranscript(detail.content, detail.started_at, detail.updated_at) : []),
-    [detail]
+  // ── Extracted business logic (annotations) ─────────────────────────
+  const {
+    allTags,
+    loaded: annotationsLoaded,
+    toggleStar,
+    addTag,
+    removeTag,
+    loadOnce: loadAnnotationsOnce,
+  } = useAnnotations({
+    setResults,
+    setDetail,
+    onError: (message) => notify(message, "error"),
+  });
+
+  // ── Derived / memoized data ────────────────────────────────────────
+  // Deferred query keeps the input itself snappy while expensive derivations
+  // (message hit matching, highlight rendering) can be interrupted by React.
+  const deferredQuery = useDeferredValue(query);
+  const queryTokens = useMemo(() => tokenizeQuery(deferredQuery), [deferredQuery]);
+  const submittedTokens = useMemo(() => tokenizeQuery(submittedQuery), [submittedQuery]);
+
+  // Tokens used to drive in-session highlighting + hit navigation. Falls back
+  // to the global query so existing "click sidebar hit → highlights persist"
+  // behavior is unchanged when the user hasn't started a local search.
+  const deferredInSessionQuery = useDeferredValue(inSessionQuery);
+  const inSessionTokens = useMemo(
+    () => tokenizeQuery(deferredInSessionQuery),
+    [deferredInSessionQuery]
   );
+  const detailQueryTokens = inSessionTokens.length > 0 ? inSessionTokens : queryTokens;
 
-  const visibleSegments = useMemo(() => {
-    if (messageRoleFilter === "all") return parsedSegments;
-    return parsedSegments.filter((segment) => segment.role === messageRoleFilter);
-  }, [parsedSegments, messageRoleFilter]);
+  const toolBucketFilter = useMemo<ToolBucket | null>(() => {
+    if (typeof messageRoleFilter !== "string") return null;
+    if (!messageRoleFilter.startsWith("tool:")) return null;
+    return messageRoleFilter.slice("tool:".length) as ToolBucket;
+  }, [messageRoleFilter]);
 
-  const detailMessageHits = useMemo(() => {
+  const visibleEvents = useMemo<TimelineEvent[]>(() => {
     if (!detail) return [];
-    if (activeResult?.message_hits?.length) {
-      return messageRoleFilter === "all"
-        ? activeResult.message_hits
-        : activeResult.message_hits.filter((item) => item.role === messageRoleFilter);
+    if (messageRoleFilter === "all") return detail.events;
+    if (messageRoleFilter === "subagent") {
+      // Keep only subagent-spawn tool calls (Cursor `Task` / Claude `Agent`)
+      // from the main session as contextual anchors; full subagent content is
+      // rendered via `visibleSubagents`.
+      return detail.events.filter(
+        (event) => event.kind === "tool_use" && isSubagentToolEvent(event.tool_name)
+      );
     }
-    if (!queryTokens.length) return [];
-    return visibleSegments
-      .filter((segment) => {
-        const haystack = decodeEntities(segment.text).toLowerCase();
-        return queryTokens.every((token) => haystack.includes(token));
+    if (toolBucketFilter) {
+      return detail.events.filter(
+        (event) =>
+          event.kind === "tool_use" && toolCategory(event.tool_name) === toolBucketFilter
+      );
+    }
+    return detail.events.filter((event) => event.category === messageRoleFilter);
+  }, [detail, messageRoleFilter, toolBucketFilter]);
+
+  const visibleSubagents = useMemo(() => {
+    if (!detail) return [];
+    return detail.subagents
+      .map((subagent) => ({
+        ...subagent,
+        filteredEvents:
+          messageRoleFilter === "all" || messageRoleFilter === "subagent"
+            ? subagent.events
+            : toolBucketFilter
+              ? subagent.events.filter(
+                  (event) =>
+                    event.kind === "tool_use" &&
+                    toolCategory(event.tool_name) === toolBucketFilter
+                )
+              : subagent.events.filter((event) => event.category === messageRoleFilter),
+      }))
+      .filter((subagent) => subagent.filteredEvents.length > 0);
+  }, [detail, messageRoleFilter, toolBucketFilter]);
+
+  // Frequency of every (real) tool bucket across the main timeline + every
+  // subagent transcript. Drives the toolbar's secondary filter row, which only
+  // surfaces buckets that actually appear in this session — keeps the chip set
+  // small and contextually relevant.
+  const toolBucketCounts = useMemo<Record<ToolBucket, number>>(() => {
+    const counts: Record<ToolBucket, number> = {
+      read: 0, write: 0, exec: 0, agent: 0, web: 0, danger: 0,
+    };
+    if (!detail) return counts;
+    const tally = (events: TimelineEvent[]) => {
+      for (const event of events) {
+        if (event.kind !== "tool_use") continue;
+        const cat = toolCategory(event.tool_name);
+        if (cat === "default" || cat === "subagent") continue;
+        counts[cat as ToolBucket] += 1;
+      }
+    };
+    tally(detail.events);
+    for (const subagent of detail.subagents) tally(subagent.events);
+    return counts;
+  }, [detail]);
+
+  const visibleHistoryEntries = useMemo(
+    () => [
+      ...visibleEvents.map((event) => ({ event, sourceLabel: "Main session" })),
+      ...visibleSubagents.flatMap((subagent) =>
+        subagent.filteredEvents.map((event) => ({
+          event,
+          sourceLabel: `Subagent · ${subagent.title || subagent.session_id}`,
+        }))
+      ),
+    ],
+    [visibleEvents, visibleSubagents]
+  );
+
+  const detailMessageHits = useMemo<DetailMessageHit[]>(() => {
+    if (!detail) return [];
+    if (!detailQueryTokens.length) return [];
+    return visibleHistoryEntries
+      .filter(({ event }) => {
+        const haystack = decodeEntities(eventSearchText(event)).toLowerCase();
+        return detailQueryTokens.every((token) => haystack.includes(token));
       })
-      .map((segment) => ({
-        segment_index: segment.index,
-        role: segment.role,
-        ts: segment.ts,
-        preview: stripHtml(segment.text).slice(0, 220),
+      .map(({ event, sourceLabel }) => ({
+        event_id: event.event_id,
+        category: event.category,
+        ts: event.ts,
+        preview: buildHistoryPreview(eventSearchText(event)),
+        source_label: sourceLabel,
       }));
-  }, [detail, activeResult, visibleSegments, queryTokens, messageRoleFilter]);
+  }, [detail, visibleHistoryEntries, detailQueryTokens]);
+
+  const filteredResults = useMemo(() => {
+    return results.filter((item) => {
+      if (selectedSource !== "all" && item.source !== selectedSource) return false;
+      if (onlyStarred && !item.starred) return false;
+      if (selectedTags.length > 0) {
+        const tags = item.tags || [];
+        if (!selectedTags.some((tag) => tags.includes(tag))) return false;
+      }
+      return true;
+    });
+  }, [results, selectedSource, onlyStarred, selectedTags]);
+
+  const repoOptions = useMemo(() => {
+    const filtered =
+      selectedSource === "all"
+        ? repoCatalog
+        : repoCatalog.filter((option) => option.source === selectedSource);
+    const names = new Set<string>();
+    for (const option of filtered) names.add(option.repo);
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [repoCatalog, selectedSource]);
 
   const groupedResults = useMemo<RepoGroup[]>(() => {
-    const map = new Map<string, SearchResult[]>();
-    for (const item of results) {
-      const list = map.get(item.repo) ?? [];
-      list.push(item);
-      map.set(item.repo, list);
+    const map = new Map<string, { source: SearchResult["source"]; repoPath?: string; sessions: SearchResult[] }>();
+    for (const item of filteredResults) {
+      const key = `${item.source}:${item.repo}`;
+      const curr = map.get(key);
+      if (curr) {
+        curr.sessions.push(item);
+        if (!curr.repoPath && item.repo_path) curr.repoPath = item.repo_path;
+      } else {
+        map.set(key, {
+          source: item.source,
+          repoPath: item.repo_path,
+          sessions: [item],
+        });
+      }
     }
     return Array.from(map.entries())
-      .map(([repo, sessions]) => ({ repo, sessions: sessions.sort((a, b) => b.updated_at - a.updated_at) }))
+      .map(([key, value]) => {
+        const idx = key.indexOf(":");
+        const repo = idx >= 0 ? key.slice(idx + 1) : key;
+        return {
+          repo,
+          source: value.source,
+          repoPath: value.repoPath,
+          sessions: value.sessions.sort((a, b) => b.updated_at - a.updated_at),
+        };
+      })
       .sort((a, b) => b.sessions.length - a.sessions.length);
-  }, [results]);
+  }, [filteredResults]);
 
   useEffect(() => {
     setCollapsedRepos((prev) => {
       const next = { ...prev };
       for (const group of groupedResults) {
-        if (next[group.repo] === undefined) next[group.repo] = false;
+        const key = `${group.source}:${group.repo}`;
+        if (next[key] === undefined) next[key] = false;
       }
       return next;
     });
   }, [groupedResults]);
 
-  async function openSession(sessionKey: string, targetSegment?: number) {
-    setActiveSessionKey(sessionKey);
-    if (typeof targetSegment === "number") {
-      setMessageRoleFilter("all");
-      setPendingJumpSegment(targetSegment);
-    }
-    const res = await fetch(`/api/session/${encodeURIComponent(sessionKey)}`);
-    if (!res.ok) {
-      setStatus("Failed to load session");
-      return;
-    }
-    const data = (await res.json()) as SessionDetail;
-    setDetail(data);
-  }
-
-  async function runSearch() {
-    setLoading(true);
-    setStatus("Searching...");
-    try {
-      const u = new URL("/api/search", window.location.origin);
-      u.searchParams.set("q", query);
-      u.searchParams.set("days", days);
-      u.searchParams.set("repo", selectedRepo === "all" ? "" : selectedRepo);
-      u.searchParams.set("limit", "300");
-
-      const res = await fetch(u.toString());
-      const data = await res.json();
-      const items = (data.results || []) as SearchResult[];
-      setResults(items);
-      setStatus(`${data.count || 0} results`);
-
-      const hasActive = items.some((item) => item.session_key === activeSessionKey);
-      if (items.length > 0 && (!activeSessionKey || !hasActive)) {
-        await openSession(items[0].session_key);
-        setActiveMatch(0);
+  // ── Session open + search ──────────────────────────────────────────
+  const openSession = useCallback(
+    async (sessionKey: string, options: OpenSessionOptions = {}) => {
+      const { targetSegment, historyMode = "push" } = options;
+      setActiveSessionKey(sessionKey);
+      if (historyMode !== "skip" && getSessionKeyFromUrl() !== sessionKey) {
+        syncSessionKeyToUrl(sessionKey, historyMode as Exclude<HistoryMode, "skip">);
       }
-    } catch (error) {
-      setStatus(String(error));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function openSourceFile(sessionKey: string) {
-    const res = await fetch(`/api/open-file/${encodeURIComponent(sessionKey)}`, { method: "POST" });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      setStatus(`Open failed: ${data.error || "unknown"}`);
-      return;
-    }
-    setStatus("Opened transcript file");
-  }
-
-  function parseFilenameFromContentDisposition(header: string | null, fallback: string): string {
-    if (!header) return fallback;
-    const match = header.match(/filename="([^"]+)"/i);
-    return match?.[1] || fallback;
-  }
-
-  async function exportConversation(kind: "rules" | "skill") {
-    if (!detail) return;
-    setExportLoading(kind);
-    try {
-      const u = new URL(`/api/export/${encodeURIComponent(detail.session_key)}`, window.location.origin);
-      u.searchParams.set("type", kind);
-      u.searchParams.set("mode", "smart");
-      const res = await fetch(u.toString());
-      if (!res.ok) {
-        setStatus(`Export failed: ${res.status}`);
-        return;
+      if (typeof targetSegment === "number") {
+        setMessageRoleFilter("all");
+        setPendingJumpTarget({ legacySegmentIndex: targetSegment });
       }
-      const blob = await res.blob();
-      const mode = res.headers.get("X-Export-Mode") || "basic";
-      const warning = res.headers.get("X-Export-Warning");
-      const decodedWarning = warning ? decodeURIComponent(warning) : "";
-      const fallbackName = `${decodeEntities(detail.title || detail.session_id)}-${kind.toUpperCase()}.md`;
-      const filename = parseFilenameFromContentDisposition(res.headers.get("Content-Disposition"), fallbackName);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      setStatus(
-        mode === "smart"
-          ? `Exported ${kind.toUpperCase()} (smart)`
-          : `Exported ${kind.toUpperCase()} (fallback template)${decodedWarning ? `: ${decodedWarning}` : ""}`
-      );
-    } catch (error) {
-      setStatus(`Export failed: ${String(error)}`);
-    } finally {
-      setExportLoading("");
-    }
-  }
+      setDetailLoading(true);
+      try {
+        const data = await fetchSession(sessionKey);
+        setDetail(data);
+      } catch (error) {
+        notify(`Failed to load session: ${String(error)}`, "error");
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [notify]
+  );
 
-  async function reindex() {
-    setStatus("Indexing...");
-    const res = await fetch("/api/reindex", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      setStatus(`Reindex failed: ${data.error || "unknown"}`);
-      return;
-    }
-    setStatus(`Indexed ${data.stats.sessions_indexed} sessions`);
-    await loadRepoOptions();
-    await runSearch();
-  }
+  const runSearch = useCallback(
+    async (options: { preferredSessionKey?: string; overrideQuery?: string } = {}) => {
+      const effectiveQuery = options.overrideQuery ?? query;
+      setLoading(true);
+      setStatus("Searching…");
+      try {
+        const { results: items, count } = await fetchSearch({
+          query: effectiveQuery,
+          days,
+          repo: selectedRepo,
+          source: selectedSource,
+          limit: 300,
+        });
+        setResults(items);
+        setSubmittedQuery(effectiveQuery);
+        setStatus(`${count} ${count === 1 ? "result" : "results"}`);
 
-  async function loadRepoOptions() {
+        const preferred = options.preferredSessionKey || "";
+        if (preferred) {
+          if (activeSessionKey !== preferred || !detail) {
+            await openSession(preferred, { historyMode: "skip" });
+            setActiveMatch(0);
+          }
+          return;
+        }
+
+        const hasActive = items.some((item) => item.session_key === activeSessionKey);
+        if (items.length > 0 && (!activeSessionKey || !hasActive)) {
+          await openSession(items[0].session_key, { historyMode: "replace" });
+          setActiveMatch(0);
+        }
+      } catch (error) {
+        setStatus("Search failed");
+        notify(`Search failed: ${String(error)}`, "error");
+      } finally {
+        setLoading(false);
+        setFirstLoad(false);
+      }
+    },
+    [activeSessionKey, days, detail, notify, openSession, query, selectedRepo, selectedSource]
+  );
+
+  const reindex = useCallback(async () => {
+    const toastId = pushToast("Reindexing sessions…", "loading");
+    setStatus("Indexing…");
     try {
-      const res = await fetch("/api/repos");
-      if (!res.ok) return;
-      const data = await res.json();
-      const repos = ((data.repos || []) as Array<{ repo: string }>).map((item) => item.repo);
-      setRepoOptions(repos);
+      const data = await postReindex();
+      dismissToast(toastId);
+      notify(`Indexed ${data.stats.sessions_indexed} sessions`, "success");
+      setStatus("Ready");
+      await loadRepoOptions();
+      await loadSourceSummaries();
+      await runSearch();
+    } catch (error) {
+      dismissToast(toastId);
+      setStatus("Reindex failed");
+      notify(`Reindex failed: ${String(error)}`, "error");
+    }
+  }, [dismissToast, notify, pushToast, runSearch]);
+
+  const loadRepoOptions = useCallback(async () => {
+    try {
+      setRepoCatalog(await fetchRepos());
     } catch {
-      // no-op
+      // non-fatal
     }
-  }
+  }, []);
 
-  function toggleRepo(repo: string) {
-    setCollapsedRepos((prev) => ({ ...prev, [repo]: !prev[repo] }));
-  }
+  const loadSourceSummaries = useCallback(async () => {
+    try {
+      setSourceSummaries(await fetchSources());
+    } catch {
+      // non-fatal
+    }
+  }, []);
 
-  function jumpToMatch(nextIndex: number) {
-    if (!detailMessageHits.length) return;
-    const normalized = ((nextIndex % detailMessageHits.length) + detailMessageHits.length) % detailMessageHits.length;
-    setActiveMatch(normalized);
-    setPendingJumpSegment(detailMessageHits[normalized].segment_index);
-  }
+  // Switching source triggers a fresh backend search, but we also narrow the
+  // currently rendered results synchronously so the sidebar's "Threads · X / Y"
+  // hint doesn't briefly show a stale total before the request resolves.
+  const handleSelectSource = useCallback((next: SourceFilter) => {
+    setSelectedSource((prev) => {
+      if (prev === next) return prev;
+      setResults((items) =>
+        next === "all" ? items : items.filter((item) => item.source === next)
+      );
+      return next;
+    });
+  }, []);
 
-  function scrollToSegmentInViewport(segmentIndex: number) {
+  // ── Utilities bound to current detail ──────────────────────────────
+  const onCopySessionId = useCallback(async () => {
+    if (!detail) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(detail.session_id);
+      } else {
+        const input = document.createElement("textarea");
+        input.value = detail.session_id;
+        input.setAttribute("readonly", "true");
+        input.style.position = "absolute";
+        input.style.left = "-9999px";
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      notify("Session ID copied", "success");
+    } catch (error) {
+      notify(`Copy failed: ${String(error)}`, "error");
+    }
+  }, [detail, notify]);
+
+  const onExport = useCallback(
+    async (kind: ExportKind) => {
+      if (!detail) return;
+      setExportLoading(kind);
+      const toastId = pushToast(`Exporting ${kind.toUpperCase()}…`, "loading");
+      try {
+        const fallback = `${decodeEntities(detail.title || detail.session_id)}-${kind.toUpperCase()}.md`;
+        const { blob, mode, warning, filename } = await fetchExport(
+          detail.session_key,
+          kind,
+          fallback
+        );
+        downloadBlob(blob, filename);
+        dismissToast(toastId);
+        notify(
+          mode === "smart"
+            ? `Exported ${kind.toUpperCase()} (smart)`
+            : `Exported ${kind.toUpperCase()} (fallback)${warning ? ` – ${warning}` : ""}`,
+          mode === "smart" ? "success" : "info"
+        );
+      } catch (error) {
+        dismissToast(toastId);
+        notify(`Export failed: ${String(error)}`, "error");
+      } finally {
+        setExportLoading("");
+      }
+    },
+    [detail, dismissToast, notify, pushToast]
+  );
+
+  // Permanently remove the currently open session: nukes the transcript file
+  // (and any sidechain agents) on disk via the backend, prunes the session
+  // from results, clears the open detail pane + URL state, and surfaces a
+  // toast for both success and failure. The DeleteSessionButton awaits this
+  // promise to keep its busy state in sync.
+  const onDeleteSession = useCallback(async () => {
+    if (!detail) return;
+    const sessionKey = detail.session_key;
+    const friendlyTitle = decodeEntities(detail.title || detail.session_id);
+    const toastId = pushToast(`Deleting "${friendlyTitle}"…`, "loading");
+    try {
+      await deleteSession(sessionKey);
+      setResults((prev) => prev.filter((item) => item.session_key !== sessionKey));
+      setDetail(null);
+      setActiveSessionKey("");
+      if (getSessionKeyFromUrl() === sessionKey) {
+        syncSessionKeyToUrl("", "replace");
+      }
+      dismissToast(toastId);
+      notify(`Deleted "${friendlyTitle}"`, "success");
+      loadRepoOptions().catch(() => undefined);
+      loadSourceSummaries().catch(() => undefined);
+    } catch (error) {
+      dismissToast(toastId);
+      notify(`Delete failed: ${String(error)}`, "error");
+      throw error;
+    }
+  }, [detail, dismissToast, loadRepoOptions, loadSourceSummaries, notify, pushToast]);
+
+  const jumpToMatch = useCallback(
+    (nextIndex: number) => {
+      if (!detailMessageHits.length) return;
+      const normalized =
+        ((nextIndex % detailMessageHits.length) + detailMessageHits.length) %
+        detailMessageHits.length;
+      setActiveMatch(normalized);
+      setPulseKey((prev) => prev + 1);
+      setPendingJumpTarget({ eventId: detailMessageHits[normalized].event_id });
+    },
+    [detailMessageHits]
+  );
+
+  const scrollToEventInViewport = useCallback((eventId: string) => {
     const viewport = conversationViewportRef.current;
-    const target = segmentRefs.current[segmentIndex];
+    const target = eventRefs.current[eventId];
     if (!viewport || !target) return;
     const viewportRect = viewport.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
     const nextTop = viewport.scrollTop + (targetRect.top - viewportRect.top) - 96;
     viewport.scrollTo({ top: Math.max(0, nextTop), behavior: "smooth" });
-  }
+  }, []);
 
-  function scrollConversationToTop() {
+  const scrollToTop = useCallback(() => {
     conversationViewportRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  }, []);
 
+  const registerEventRef = useCallback((eventId: string, node: HTMLDivElement | null) => {
+    eventRefs.current[eventId] = node;
+  }, []);
+
+  const handleJumpFromSidebar = useCallback(
+    (sessionKey: string, segmentIndex: number, hitIndex: number) => {
+      setActiveMatch(hitIndex);
+      setPulseKey((prev) => prev + 1);
+      void openSession(sessionKey, { targetSegment: segmentIndex, historyMode: "push" });
+    },
+    [openSession]
+  );
+
+  const handleToggleRepo = useCallback((groupKey: string) => {
+    setCollapsedRepos((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
+  }, []);
+
+  // ── Effects ────────────────────────────────────────────────────────
   useEffect(() => {
     if (detailMessageHits.length > 0) {
       setActiveMatch((prev) => Math.min(prev, detailMessageHits.length - 1));
@@ -429,349 +564,325 @@ export default function App() {
   }, [detailMessageHits.length]);
 
   useEffect(() => {
-    if (pendingJumpSegment === null) return;
-    scrollToSegmentInViewport(pendingJumpSegment);
-    setPendingJumpSegment(null);
-  }, [pendingJumpSegment, parsedSegments, viewMode, messageRoleFilter]);
+    if (!pendingJumpTarget) return;
+    let eventId = pendingJumpTarget.eventId;
+    if (!eventId && typeof pendingJumpTarget.legacySegmentIndex === "number" && detail) {
+      eventId = detail.events.find(
+        (event) => event.legacy_segment_index === pendingJumpTarget.legacySegmentIndex
+      )?.event_id;
+    }
+    if (!eventId) return;
+    // Tool results are folded under the originating tool_use card and have no
+    // standalone DOM node. If the target event_id has no registered ref and it
+    // belongs to a folded tool_result, scroll to the matching tool_use instead.
+    if (!eventRefs.current[eventId] && detail) {
+      const target = detail.events.find((event) => event.event_id === eventId);
+      if (
+        target &&
+        target.kind === "meta" &&
+        target.content_type === "tool_result" &&
+        target.tool_call_id
+      ) {
+        const parent = detail.events.find(
+          (event) => event.kind === "tool_use" && event.tool_call_id === target.tool_call_id
+        );
+        if (parent) eventId = parent.event_id;
+      }
+    }
+    scrollToEventInViewport(eventId);
+    setPendingJumpTarget(null);
+  }, [pendingJumpTarget, detail, messageRoleFilter, visibleSubagents.length, scrollToEventInViewport]);
 
+  // Auto-search as the user types (debounced). Uses the deferred query so
+  // React can batch updates during fast typing.
   useEffect(() => {
-    runSearch().catch((error) => setStatus(String(error)));
-  }, [days, selectedRepo]);
+    if (!didInitRef.current) return;
+    const id = window.setTimeout(() => {
+      runSearch({ overrideQuery: deferredQuery }).catch((error) =>
+        notify(String(error), "error")
+      );
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [deferredQuery]);
+
+  // Filters change immediately re-run the search with the current query.
+  useEffect(() => {
+    if (!didInitRef.current) return;
+    runSearch().catch((error) => notify(String(error), "error"));
+  }, [days, selectedRepo, selectedSource]);
+
+  // Picked source removed from available repos; reset to "all".
+  useEffect(() => {
+    if (selectedRepo === "all") return;
+    if (selectedSource === "all") return;
+    const stillAvailable = repoCatalog.some(
+      (option) => option.repo === selectedRepo && option.source === selectedSource
+    );
+    if (!stillAvailable) setSelectedRepo("all");
+  }, [repoCatalog, selectedRepo, selectedSource]);
+
+  // Reconcile persisted tag selection: drop tags that no longer exist on any
+  // session. Gated on `annotationsLoaded` so an empty initial allTags doesn't
+  // wipe the user's choice during the first render.
+  useEffect(() => {
+    if (!annotationsLoaded) return;
+    if (selectedTags.length === 0) return;
+    const known = new Set(allTags.map((t) => t.tag));
+    const filtered = selectedTags.filter((tag) => known.has(tag));
+    if (filtered.length !== selectedTags.length) setSelectedTags(filtered);
+  }, [annotationsLoaded, allTags, selectedTags, setSelectedTags]);
+
+  // Switching to a different conversation should always start with a fresh
+  // in-session search box — leftover terms from a prior session almost never
+  // make sense in the new one.
+  useEffect(() => {
+    setInSessionQuery("");
+  }, [activeSessionKey]);
 
   useEffect(() => {
     loadRepoOptions().catch(() => undefined);
-    runSearch().catch((error) => setStatus(String(error)));
+    loadSourceSummaries().catch(() => undefined);
+    loadAnnotationsOnce().catch(() => undefined);
+    runSearch({ preferredSessionKey: initialUrlSessionKeyRef.current }).catch((error) =>
+      notify(String(error), "error")
+    );
+    didInitRef.current = true;
   }, []);
 
+  useEffect(() => {
+    setTagInput("");
+  }, [detail?.session_key]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const nextView = getViewFromUrl();
+      setView((prev) => (prev === nextView ? prev : nextView));
+      const sessionKey = getSessionKeyFromUrl();
+      if (!sessionKey || sessionKey === activeSessionKey) return;
+      openSession(sessionKey, { historyMode: "skip" }).catch((error) => notify(String(error), "error"));
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [activeSessionKey, openSession, notify]);
+
+  useEffect(() => {
+    if (getViewFromUrl() !== view) syncViewToUrl(view, "replace");
+  }, [view]);
+
+  const hasQuery = submittedTokens.length > 0;
+
+  const handleSidebarOpenSession = useCallback(
+    (sessionKey: string) => {
+      void openSession(sessionKey, { historyMode: "push" });
+      setSidebarOpen(false);
+    },
+    [openSession]
+  );
+
+  const handleSidebarJumpToHit = useCallback(
+    (sessionKey: string, segmentIndex: number, hitIndex: number) => {
+      handleJumpFromSidebar(sessionKey, segmentIndex, hitIndex);
+      setSidebarOpen(false);
+    },
+    [handleJumpFromSidebar]
+  );
+
+  // Jump from the prompts library back to the session that produced the
+  // occurrence: switch to the sessions view, open the session, and scroll to
+  // the matching segment. The setView call also flips ?view= back to its
+  // default so the URL reflects what the user is now looking at.
+  const handleJumpFromPrompt = useCallback(
+    (occurrence: PromptOccurrence) => {
+      setView("sessions");
+      void openSession(occurrence.session_key, {
+        targetSegment: occurrence.segment_index,
+        historyMode: "push",
+      });
+    },
+    [openSession]
+  );
+
   return (
-    <div className="h-screen overflow-hidden grid grid-cols-[352px_1fr]">
-      <aside className="bg-[#2b3037] border-r border-[#434a57] text-[#edf2fb] flex flex-col min-h-0">
-        <div className="px-4 py-4 border-b border-[#434a57]">
-          <div className="flex items-center gap-2 text-[16px] font-semibold tracking-[0.01em]">
-            <Sparkles className="h-4 w-4 text-[#8db9ff]" /> Cursor Conversations
-          </div>
-
-          <div className="mt-3 space-y-2.5">
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") runSearch();
-              }}
-              placeholder="Search all repos"
-              className="bg-[#272c33] border-[#555f72] text-[#f4f7fd] placeholder:text-[#aab4c6] h-10 focus-visible:ring-2 focus-visible:ring-[#6b9bff]"
-            />
-
-            <div className="space-y-2">
-              <Select value={selectedRepo} onValueChange={setSelectedRepo}>
-                <SelectTrigger className="bg-[#272c33] border-[#555f72] text-[#eef3fd] h-10 focus:ring-2 focus:ring-[#6b9bff]">
-                  <SelectValue placeholder="Filter project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All projects</SelectItem>
-                  {repoOptions.map((repo) => (
-                    <SelectItem key={repo} value={repo}>
-                      {prettifyRepoName(repo)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="flex gap-2">
-              <div className="w-[130px]">
-                <Select value={days} onValueChange={setDays}>
-                  <SelectTrigger className="bg-[#272c33] border-[#555f72] text-[#eef3fd] h-10 focus:ring-2 focus:ring-[#6b9bff]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DAY_OPTIONS.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Button
-                onClick={runSearch}
-                className="bg-[#669bff] text-[#0f1420] hover:bg-[#79a9ff] gap-1.5 h-10 px-4 shadow-[0_8px_18px_rgba(20,88,255,0.26)]"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Search
-              </Button>
-
-              <Button
-                variant="ghost"
-                className="text-[#dce4f3] hover:bg-[#454c59] h-10 w-10 px-0 rounded-md focus-visible:ring-2 focus-visible:ring-[#6b9bff]"
-                onClick={reindex}
-                title="Reindex"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-4 py-2.5 text-sm text-[#c1cadc] border-b border-[#434a57]">Threads · {results.length}</div>
-
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="px-2 py-3 space-y-2">
-            {groupedResults.map((group) => {
-              const collapsed = collapsedRepos[group.repo] ?? false;
-              const repoLabel = prettifyRepoName(group.repo);
-              return (
-                <div key={group.repo} className="rounded-lg">
-                  <button
-                    className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-[#454c59] text-[#edf2fb] transition-colors duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-[#6b9bff]"
-                    onClick={() => toggleRepo(group.repo)}
-                  >
-                    {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                    <Folder className="h-4 w-4 text-[#c8d1e2]" />
-                    <span className="truncate text-[14px] font-semibold">{repoLabel}</span>
-                    <span className="ml-auto text-xs text-[#b5bed1]">{group.sessions.length}</span>
-                  </button>
-
-                  {!collapsed ? (
-                    <div className="mt-1 pl-7 space-y-1">
-                      {group.sessions.map((item) => {
-                        const selected = item.session_key === activeSessionKey;
-                        const title = decodeEntities(item.title || stripHtml(item.snippet) || item.session_id);
-                        const hasQuery = queryTokens.length > 0;
-                        return (
-                          <div
-                            key={item.session_key}
-                            className={`w-full text-left px-2.5 py-2 rounded-md transition-colors duration-150 ${
-                              selected ? "bg-[#5f6677]/90 ring-1 ring-[#88a1d0]" : "hover:bg-[#424955]"
-                            }`}
-                          >
-                            <button className="w-full text-left" onClick={() => openSession(item.session_key)}>
-                              <div className="flex items-start gap-2">
-                                <div className="truncate text-[14px] leading-5 text-[#f5f8fd] flex-1">{title}</div>
-                                <div className="text-[12px] text-[#bcc5d8] shrink-0">{relativeTime(item.updated_at)}</div>
-                              </div>
-                              <div className="mt-1 flex items-center gap-2 text-[12px] text-[#a5afc4]">
-                                <Clock3 className="h-3 w-3" />
-                                <span>{formatDuration(item.duration_sec)}</span>
-                                <span>·</span>
-                                <span className="truncate">{formatTs(item.started_at)}</span>
-                              </div>
-                            </button>
-                            {hasQuery ? (
-                              <div className="mt-1.5 space-y-1.5">
-                                <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-[#8eb5ff]">命中消息 {item.match_count || 0} 条</span>
-                                </div>
-                                {item.message_hits.slice(0, 2).map((hit, hitIndex) => (
-                                  <button
-                                    key={`${item.session_key}-${hit.segment_index}-${hitIndex}`}
-                                    onClick={() => {
-                                      setActiveMatch(hitIndex);
-                                      openSession(item.session_key, hit.segment_index);
-                                    }}
-                                    className="w-full text-left rounded border border-[#566176] bg-[#2d3442]/80 px-2 py-1.5 text-[11px] text-[#dce5f6] hover:bg-[#394357]"
-                                  >
-                                    <div className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[#9cb0d0]">
-                                      <span>{hit.role === "assistant" ? "Cursor" : hit.role}</span>
-                                      <span>·</span>
-                                      <span>{formatClock(hit.ts)}</span>
-                                    </div>
-                                    <div className="line-clamp-2" dangerouslySetInnerHTML={{ __html: hit.preview }} />
-                                  </button>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </ScrollArea>
-      </aside>
-
-      <section className="bg-[#12161d] text-[#ebeff8] h-full flex flex-col overflow-hidden">
-        <div className="sticky top-0 z-30 h-[62px] border-b border-[#2a3140] px-5 flex items-center gap-3 bg-[#12161d]/95 backdrop-blur">
-          {detail ? (
-            <>
-              <div className="truncate text-[19px] font-semibold tracking-[0.01em]">{decodeEntities(detail.title || detail.session_id)}</div>
-              <Badge variant="outline" className="border-[#414b5f] text-[#b3bdd0]">
-                {prettifyRepoName(detail.repo)}
-              </Badge>
-              <div className="ml-auto text-[13px] text-[#99a7bf]">Started {formatTs(detail.started_at)}</div>
-              <div className="text-[13px] text-[#99a7bf]">Duration {formatDuration(detail.duration_sec)}</div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-[#445064] bg-[#1a212d] hover:bg-[#263246] focus-visible:ring-2 focus-visible:ring-[#6b9bff]"
-                onClick={() => openSourceFile(detail.session_key)}
-              >
-                <FileText className="h-4 w-4" /> Open
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-[#445064] bg-[#1a212d] hover:bg-[#263246] focus-visible:ring-2 focus-visible:ring-[#6b9bff]"
-                onClick={() => exportConversation("rules")}
-                disabled={exportLoading !== ""}
-              >
-                {exportLoading === "rules" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Smart Rules
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-[#445064] bg-[#1a212d] hover:bg-[#263246] focus-visible:ring-2 focus-visible:ring-[#6b9bff]"
-                onClick={() => exportConversation("skill")}
-                disabled={exportLoading !== ""}
-              >
-                {exportLoading === "skill" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Smart Skill
-              </Button>
-            </>
-          ) : (
-            <div className="text-[15px] text-[#919bad]">Select a thread from the left panel.</div>
-          )}
-        </div>
-
-        {!detail ? (
-          <div className="h-full flex items-center justify-center text-[#8f98aa] text-[15px]">No session selected.</div>
-        ) : (
+    <div className="relative h-screen overflow-hidden bg-background text-foreground">
+      <div className="flex h-full min-h-0">
+        {view === "sessions" ? (
           <>
-            <div className="sticky top-[62px] z-20 h-[52px] border-b border-[#2a3140] px-5 flex items-center gap-2 bg-[#131b29]/95 backdrop-blur">
-              <Button
-                size="sm"
-                variant={viewMode === "parsed" ? "default" : "ghost"}
-                className={viewMode === "parsed" ? "bg-[#669bff] text-[#111726] hover:bg-[#79a9ff]" : "hover:bg-[#25324a]"}
-                onClick={() => setViewMode("parsed")}
-              >
-                Conversation
-              </Button>
-              <Button
-                size="sm"
-                variant={viewMode === "raw" ? "default" : "ghost"}
-                className={viewMode === "raw" ? "bg-[#669bff] text-[#111726] hover:bg-[#79a9ff]" : "hover:bg-[#25324a]"}
-                onClick={() => setViewMode("raw")}
-              >
-                Raw
-              </Button>
-              {viewMode === "parsed" ? (
-                <div className="ml-2 inline-flex items-center rounded-md border border-[#3a455a] bg-[#1a2435] p-0.5">
-                  <button
-                    className={`px-2.5 py-1 text-[12px] rounded ${
-                      messageRoleFilter === "all" ? "bg-[#2e4b78] text-[#e6f0ff]" : "text-[#9db0d1] hover:bg-[#23304a]"
-                    }`}
-                    onClick={() => setMessageRoleFilter("all")}
-                  >
-                    全部
-                  </button>
-                  <button
-                    className={`px-2.5 py-1 text-[12px] rounded ${
-                      messageRoleFilter === "user" ? "bg-[#2e4b78] text-[#e6f0ff]" : "text-[#9db0d1] hover:bg-[#23304a]"
-                    }`}
-                    onClick={() => setMessageRoleFilter("user")}
-                  >
-                    User
-                  </button>
-                  <button
-                    className={`px-2.5 py-1 text-[12px] rounded ${
-                      messageRoleFilter === "assistant"
-                        ? "bg-[#2e4b78] text-[#e6f0ff]"
-                        : "text-[#9db0d1] hover:bg-[#23304a]"
-                    }`}
-                    onClick={() => setMessageRoleFilter("assistant")}
-                  >
-                    Cursor
-                  </button>
-                </div>
-              ) : null}
-              <div className="text-[12px] text-[#8492ab] ml-1">message timestamps are interpolated</div>
-              {viewMode === "parsed" && queryTokens.length > 0 ? (
-                <div className="ml-2 flex items-center gap-1.5 rounded-md border border-[#3a455a] bg-[#1a2435] px-2 py-1 text-[12px] text-[#b7c8e9]">
-                  <span>命中 {detailMessageHits.length} 条</span>
-                  {detailMessageHits.length > 0 ? (
-                    <>
-                      <button
-                        className="rounded p-0.5 hover:bg-[#2f3f5d]"
-                        onClick={() => jumpToMatch(activeMatch - 1)}
-                        title="Previous match"
-                      >
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        className="rounded p-0.5 hover:bg-[#2f3f5d]"
-                        onClick={() => jumpToMatch(activeMatch + 1)}
-                        title="Next match"
-                      >
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
-                      <span className="text-[#89a3d5]">
-                        {detailMessageHits.length ? activeMatch + 1 : 0}/{detailMessageHits.length}
-                      </span>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-              <div className="ml-auto text-[13px] text-[#94a2bc]">{status}</div>
+            <div
+              className={cn(
+                "fixed inset-y-0 left-0 z-50 w-[min(360px,85vw)] transition-transform duration-200 ease-out shadow-editorial-lg",
+                "lg:static lg:z-auto lg:h-full lg:w-[352px] lg:shrink-0 lg:translate-x-0 lg:shadow-none",
+                sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+              )}
+            >
+              <Sidebar
+                className="h-full w-full"
+                query={query}
+                setQuery={setQuery}
+                onSubmit={() => void runSearch()}
+                loading={loading}
+                onReindex={() => void reindex()}
+                days={days}
+                setDays={setDays}
+                selectedRepo={selectedRepo}
+                setSelectedRepo={setSelectedRepo}
+                repoOptions={repoOptions}
+                selectedSource={selectedSource}
+                setSelectedSource={handleSelectSource}
+                sourceSummaries={sourceSummaries}
+                onlyStarred={onlyStarred}
+                setOnlyStarred={setOnlyStarred}
+                selectedTags={selectedTags}
+                setSelectedTags={setSelectedTags}
+                allTags={allTags}
+                tagPickerOpen={tagPickerOpen}
+                setTagPickerOpen={setTagPickerOpen}
+                filteredCount={filteredResults.length}
+                totalCount={results.length}
+                hasQuery={hasQuery}
+                groupedResults={groupedResults}
+                collapsedRepos={collapsedRepos}
+                onToggleRepo={handleToggleRepo}
+                activeSessionKey={activeSessionKey}
+                onOpenSession={handleSidebarOpenSession}
+                onToggleStar={toggleStar}
+                onJumpToHit={handleSidebarJumpToHit}
+                firstLoad={firstLoad}
+                view={view}
+                onChangeView={setView}
+              />
             </div>
 
-            <div className="relative h-[calc(100%-112px)]">
-              <ScrollArea className="h-full" viewportRef={conversationViewportRef}>
-                {viewMode === "raw" ? (
-                  <pre className="transcript-body p-6 text-[14px] text-[#dee6f6]">{detail.content}</pre>
-                ) : (
-                  <div className="max-w-[980px] mx-auto p-6 space-y-5">
-                    {visibleSegments.map((segment, index) => {
-                      const meta = roleMeta(segment.role);
-                      const isMatch = detailMessageHits.some((hit) => hit.segment_index === segment.index);
-                      const isActiveMatch =
-                        detailMessageHits[activeMatch] && detailMessageHits[activeMatch].segment_index === segment.index;
-                      return (
-                        <div
-                          key={`${segment.role}-${index}`}
-                          className={`flex ${meta.wrapper}`}
-                          ref={(node) => {
-                            segmentRefs.current[segment.index] = node;
-                          }}
-                        >
-                          <div className="max-w-[86%]">
-                            <Badge
-                              variant="outline"
-                              className={`${meta.badge} mb-2 ${isActiveMatch ? "ring-2 ring-[#7ab3ff]" : ""}`}
-                            >
-                              {meta.label} · {formatClock(segment.ts)}
-                            </Badge>
-                            <Card
-                              className={`border ${meta.bubble} p-4 transcript-body text-[15px] shadow-[0_10px_24px_rgba(0,0,0,0.2)] ${
-                                isMatch ? "ring-1 ring-[#6fa8ff]/70" : ""
-                              } ${isActiveMatch ? "ring-2 ring-[#7ab3ff]" : ""}`}
-                            >
-                              {renderHighlightedText(segment.text, queryTokens)}
-                            </Card>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
+            {sidebarOpen ? (
+              <div
+                onClick={() => setSidebarOpen(false)}
+                aria-hidden
+                className="fixed inset-0 z-40 bg-foreground/40 backdrop-blur-[2px] animate-fade-in lg:hidden"
+              />
+            ) : null}
+
+            <SessionView
+              className="flex-1 min-w-0"
+              onOpenSidebar={() => setSidebarOpen(true)}
+              detail={detail}
+              detailLoading={detailLoading}
+              messageRoleFilter={messageRoleFilter}
+              setMessageRoleFilter={setMessageRoleFilter}
+              toolBucketCounts={toolBucketCounts}
+              queryTokens={detailQueryTokens}
+              detailMessageHits={detailMessageHits}
+              activeMatch={activeMatch}
+              pulseKey={pulseKey}
+              onPrevMatch={() => jumpToMatch(activeMatch - 1)}
+              onNextMatch={() => jumpToMatch(activeMatch + 1)}
+              inSessionQuery={inSessionQuery}
+              setInSessionQuery={setInSessionQuery}
+              visibleEvents={visibleEvents}
+              visibleSubagents={visibleSubagents}
+              conversationViewportRef={conversationViewportRef}
+              registerEventRef={registerEventRef}
+              onToggleStar={() => detail && toggleStar(detail.session_key)}
+              onCopySessionId={onCopySessionId}
+              onExport={onExport}
+              exportLoading={exportLoading}
+              onDeleteSession={onDeleteSession}
+              tagInput={tagInput}
+              setTagInput={setTagInput}
+              onAddTag={(value) => (detail ? addTag(detail.session_key, value) : false)}
+              onRemoveTag={(tag) => detail && removeTag(detail.session_key, tag)}
+              statusText={status}
+            />
           </>
+        ) : (
+          <PromptsViewShell
+            view={view}
+            onChangeView={setView}
+            sourceSummaries={sourceSummaries}
+            repoCatalog={repoCatalog}
+            onJumpToOccurrence={handleJumpFromPrompt}
+            onNotify={notify}
+          />
         )}
-      </section>
-      {detail ? (
-        <Button
-          onClick={scrollConversationToTop}
-          size="sm"
-          className="fixed bottom-6 right-6 z-[80] h-10 px-3 rounded-full bg-[#2d4d80] text-[#e6f0ff] hover:bg-[#3c629e] shadow-[0_12px_30px_rgba(6,12,22,0.55)] border border-[#4c75b6]/60"
-        >
-          <ArrowUp className="h-4 w-4 mr-1" />
-          回到顶部
-        </Button>
+      </div>
+
+      {view === "sessions" && detail ? (
+        <ScrollToTop onClick={scrollToTop} label="回到顶部" />
       ) : null}
+    </div>
+  );
+}
+
+interface PromptsViewShellProps {
+  view: AppView;
+  onChangeView: (next: AppView) => void;
+  sourceSummaries: SourceSummary[];
+  repoCatalog: RepoOption[];
+  onJumpToOccurrence: (occurrence: PromptOccurrence) => void;
+  onNotify: (message: string, tone?: "default" | "success" | "error") => void;
+}
+
+/**
+ * Wrapper around <PromptsView /> that pins the top-level Sessions/Prompts tab
+ * on the leftmost rail so the user can flip back to the sessions view without
+ * losing the prompt selection. Mirrors the brand header that lives inside
+ * <Sidebar /> for the sessions view.
+ */
+function PromptsViewShell({
+  view,
+  onChangeView,
+  sourceSummaries,
+  repoCatalog,
+  onJumpToOccurrence,
+  onNotify,
+}: PromptsViewShellProps) {
+  return (
+    <div className="flex flex-1 min-w-0 min-h-0 flex-col">
+      <ViewSwitcherHeader view={view} onChange={onChangeView} />
+      <PromptsView
+        className="flex-1"
+        sourceSummaries={sourceSummaries}
+        repoCatalog={repoCatalog}
+        onJumpToOccurrence={onJumpToOccurrence}
+        onNotify={onNotify}
+      />
+    </div>
+  );
+}
+
+interface ViewSwitcherHeaderProps {
+  view: AppView;
+  onChange: (next: AppView) => void;
+}
+
+function ViewSwitcherHeader({ view, onChange }: ViewSwitcherHeaderProps) {
+  return (
+    <div className="flex items-center justify-between border-b border-border bg-background-soft px-4 py-2.5">
+      <div
+        role="tablist"
+        aria-label="Top-level view"
+        className="flex items-center gap-0.5 rounded-md bg-foreground/[0.06] p-0.5"
+      >
+        {(["sessions", "prompts"] as AppView[]).map((id) => {
+          const active = view === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onChange(id)}
+              className={cn(
+                "min-w-[88px] inline-flex items-center justify-center rounded px-3 py-1 text-[11px] font-medium transition-all",
+                "focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
+                active
+                  ? "bg-background text-foreground shadow-[0_1px_2px_rgba(22,24,35,0.12),0_0_0_0.5px_rgba(22,24,35,0.08)]"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {id === "sessions" ? "Sessions" : "Prompts"}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
