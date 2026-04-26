@@ -51,21 +51,3 @@ export const DEFAULT_HOST = "127.0.0.1";
 export const REINDEX_INTERVAL_MS = 30_000;
 export const ANNOTATION_NOTES_MAX = 8192;
 export const ANNOTATION_TAG_MAX = 32;
-
-// User-data-scoped paths for the embedding pipeline. We deliberately put the
-// 100MB+ ONNX model under "Application Support" rather than DATA_DIR so it
-// survives app uninstall/reinstall and doesn't bloat the dev workspace
-// `data/` folder. Tests/CI can point everything inside DATA_DIR by setting
-// LOGUE_USER_DATA_DIR=$LOGUE_DATA_DIR.
-const USER_DATA_OVERRIDE = process.env.LOGUE_USER_DATA_DIR;
-export const USER_DATA_DIR = USER_DATA_OVERRIDE
-  ? path.resolve(USER_DATA_OVERRIDE)
-  : HOME
-    ? path.join(HOME, "Library", "Application Support", "Logue")
-    : DATA_DIR;
-export const MODELS_DIR = path.join(USER_DATA_DIR, "models");
-export const EMBEDDINGS_DB = path.join(DATA_DIR, "embeddings.sqlite");
-export const EMBEDDING_MODEL_ID = "Xenova/multilingual-e5-small";
-// Output dimensionality of the model above. Hard-coded so the SQLite schema
-// can validate stored vectors at insert time without booting the model.
-export const EMBEDDING_DIMS = 384;
