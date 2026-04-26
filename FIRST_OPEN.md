@@ -89,13 +89,6 @@ which cursor-agent
 
 没有的话，去 [Cursor 官网](https://cursor.com) 下 Cursor Desktop（自带 `cursor-agent` CLI）。**不影响基本浏览功能**，只影响导出。
 
-## Smart Clustering（Prompts 视图）
-
-Prompts 一级 Tab 默认就能跑（基于 token Jaccard 相似度，无需任何额外资源）。如果想要更准确的语义聚类，可以在 Prompts 顶部条幅点 **Enable** 下载本地 multilingual-e5-small 模型（约 120MB，存在 `~/Library/Application Support/Logue/models/`）。
-
-- **Apple Silicon (arm64)**：完整支持，下载完成后即可看到 "Smart clustering ready"。
-- **Intel (x86_64)**：上游 `onnxruntime-node 1.24+` 不再发 darwin/x64 二进制（[microsoft/onnxruntime#27961](https://github.com/microsoft/onnxruntime/issues/27961)），所以条幅会显示 "Lite mode"，自动降级到 Jaccard 相似度。Prompts 列表 / Show similar / Clusters 仍然可用，只是相似度算法略简单。
-
 ## 升级到新版
 
 ```bash
