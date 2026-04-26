@@ -58,6 +58,17 @@ async function peekSessionInfo(filePath: string): Promise<{ cwd?: string; firstT
   }
 }
 
+type ImageSource =
+  | {
+      type?: "base64";
+      media_type?: string;
+      data?: string;
+    }
+  | {
+      type?: "url";
+      url?: string;
+    };
+
 type ParsedRow = {
   type?: string;
   message?: {
@@ -73,10 +84,47 @@ type ParsedRow = {
           tool_use_id?: string;
           id?: string;
           is_error?: boolean;
+          source?: ImageSource;
         }>;
   };
   timestamp?: string;
 };
+
+/**
+ * Normalised payload for an image content item from a Claude jsonl row.
+ * Stored on the timeline event's `toolInput` so the frontend can render
+ * the picture without re-parsing the raw JSON.
+ *
+ * `data` carries either:
+ *   - a `data:` URI ready for an <img src=...> when source.type === "base64"
+ *   - a remote URL when source.type === "url"
+ *
+ * `kind` discriminates the two so callers can pick the right rendering path
+ * (lightbox download for URL, inline preview for base64).
+ */
+export type ClaudeImagePayload = {
+  kind: "base64" | "url";
+  mediaType?: string;
+  data: string;
+};
+
+function extractImagePayload(item: { source?: ImageSource }): ClaudeImagePayload | null {
+  const source = item.source;
+  if (!source || typeof source !== "object") return null;
+  if (source.type === "base64") {
+    if (!source.data) return null;
+    const mediaType = source.media_type || "image/png";
+    return {
+      kind: "base64",
+      mediaType,
+      data: `data:${mediaType};base64,${source.data}`,
+    };
+  }
+  if (source.type === "url" && typeof source.url === "string" && source.url) {
+    return { kind: "url", data: source.url };
+  }
+  return null;
+}
 
 function parseLine(line: string): ParsedRow | null {
   try {
@@ -447,6 +495,34 @@ async function parseClaudeCodeJsonl(
             ts: tsValue,
           });
           continue;
+        }
+
+        // Inline images from Claude (e.g. clipboard paste, file attach).
+        // We surface them as a meta event whose `toolInput` carries a
+        // ClaudeImagePayload — the frontend renders that as a real <img>
+        // instead of dumping the base64 blob into the bubble. Falling back
+        // to the generic JSON dump (below) for anything we couldn't decode.
+        if (itemType === "image") {
+          const payload = extractImagePayload(item);
+          if (payload) {
+            const label =
+              payload.kind === "base64"
+                ? `[Image attachment · ${payload.mediaType ?? "image"}]`
+                : `[Image · ${payload.data}]`;
+            events.push({
+              eventId: `${sourcePrefix}:${eventIndex++}`,
+              // Inline images attached by the user/assistant should follow
+              // the role they came from so role filters keep them visible.
+              category: categoryFromRole(role),
+              role,
+              kind: "meta",
+              contentType: "image",
+              text: label,
+              ts: tsValue,
+              toolInput: payload,
+            });
+            continue;
+          }
         }
 
         const metaText = safeJsonStringify(item, 2);

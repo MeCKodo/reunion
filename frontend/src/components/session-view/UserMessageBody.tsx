@@ -11,7 +11,13 @@ import {
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/shared/Markdown";
 import { ImageLightbox } from "@/components/shared/ImageLightbox";
-import { assetUrl, basenameOf, extractImagePaths } from "@/lib/asset";
+import { ImageThumb } from "@/components/shared/ImageThumb";
+import {
+  assetUrl,
+  basenameOf,
+  extractImagePaths,
+  extractInlineImageRefs,
+} from "@/lib/asset";
 
 /**
  * Cursor / Claude inject several XML-shaped wrappers into the *first*
@@ -435,6 +441,66 @@ function FallbackThumb({ path, onClick, large = false }: FallbackThumbProps) {
   );
 }
 
+interface TextWithInlineImagesProps {
+  text: string;
+  queryTokens: string[];
+  keyPrefix: string;
+}
+
+/**
+ * Render a text blob, lifting `[Image: source: /abs/path.png]` markers out
+ * as real image previews. Claude CLI emits this textual form for clipboard
+ * pastes whose temp file lives outside our allowed source roots — the
+ * thumbnail's onError fallback handles the case where the file has since
+ * been cleaned up.
+ */
+function TextWithInlineImages({
+  text,
+  queryTokens,
+  keyPrefix,
+}: TextWithInlineImagesProps) {
+  const refs = React.useMemo(() => extractInlineImageRefs(text), [text]);
+  if (refs.length === 0) {
+    return <Markdown source={text} queryTokens={queryTokens} />;
+  }
+
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  refs.forEach((ref, i) => {
+    if (ref.start > cursor) {
+      const slice = text.slice(cursor, ref.start);
+      if (slice.trim()) {
+        nodes.push(
+          <Markdown
+            key={`${keyPrefix}-md-${i}`}
+            source={slice}
+            queryTokens={queryTokens}
+          />
+        );
+      }
+    }
+    nodes.push(
+      <div key={`${keyPrefix}-img-${i}`} className="max-w-md">
+        <ImageThumb source={{ kind: "path", path: ref.path }} />
+      </div>
+    );
+    cursor = ref.end;
+  });
+  if (cursor < text.length) {
+    const tail = text.slice(cursor);
+    if (tail.trim()) {
+      nodes.push(
+        <Markdown
+          key={`${keyPrefix}-md-tail`}
+          source={tail}
+          queryTokens={queryTokens}
+        />
+      );
+    }
+  }
+  return <div className="space-y-2">{nodes}</div>;
+}
+
 interface UserMessageBodyProps {
   text: string;
   queryTokens?: string[];
@@ -450,7 +516,13 @@ function UserMessageBody({ text, queryTokens = [] }: UserMessageBodyProps) {
     segments[0].kind === "text" &&
     segments[0].text === text
   ) {
-    return <Markdown source={text} queryTokens={queryTokens} />;
+    return (
+      <TextWithInlineImages
+        text={text}
+        queryTokens={queryTokens}
+        keyPrefix="root"
+      />
+    );
   }
 
   return (
@@ -460,10 +532,11 @@ function UserMessageBody({ text, queryTokens = [] }: UserMessageBodyProps) {
           const trimmed = seg.text.trim();
           if (!trimmed) return null;
           return (
-            <Markdown
+            <TextWithInlineImages
               key={`t-${i}`}
-              source={trimmed}
+              text={trimmed}
               queryTokens={queryTokens}
+              keyPrefix={`t-${i}`}
             />
           );
         }

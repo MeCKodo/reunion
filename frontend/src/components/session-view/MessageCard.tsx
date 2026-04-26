@@ -17,6 +17,8 @@ import { StructuredToolInput } from "./StructuredToolInput";
 import { Markdown } from "@/components/shared/Markdown";
 import { UserMessageBody } from "./UserMessageBody";
 import { ToolResultBlock } from "./ToolResultBlock";
+import { ImageThumb } from "@/components/shared/ImageThumb";
+import { isClaudeImagePayload } from "@/lib/asset";
 
 interface MessageCardProps {
   event: TimelineEvent;
@@ -71,6 +73,18 @@ function MessageCard({
   const isTaskEvent =
     event.kind === "tool_use" && isSubagentToolEvent(event.tool_name);
 
+  // Inline image content from Claude (user-attached or assistant-emitted).
+  // The backend serialises base64/url payloads into `tool_input` so the
+  // frontend can render an actual <img> instead of the JSON-stringified
+  // dump that used to fall through here. Falls back to the default text
+  // body when the payload shape is unrecognised.
+  const imagePayload =
+    event.kind === "meta" && event.content_type === "image"
+      ? isClaudeImagePayload(event.tool_input)
+        ? event.tool_input
+        : null
+      : null;
+
   return (
     <div
       className="flex gap-3 items-start"
@@ -116,7 +130,20 @@ function MessageCard({
             pulseClass
           )}
         >
-          {structuredInput ? (
+          {imagePayload ? (
+            <div className="max-w-md">
+              <ImageThumb
+                source={{
+                  kind: "data",
+                  url: imagePayload.data,
+                  label:
+                    imagePayload.kind === "base64"
+                      ? `Inline ${imagePayload.mediaType ?? "image"}`
+                      : imagePayload.data,
+                }}
+              />
+            </div>
+          ) : structuredInput ? (
             <StructuredToolInput
               toolName={event.tool_name ?? "Tool"}
               input={structuredInput}
