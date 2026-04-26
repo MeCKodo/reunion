@@ -4,7 +4,6 @@ import { SessionListSkeleton } from "@/components/shared/Skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
 import type {
-  AppView,
   RepoGroup,
   SourceFilter,
   SourceSummary,
@@ -72,9 +71,6 @@ interface SidebarProps {
 
   firstLoad: boolean;
   className?: string;
-
-  view?: AppView;
-  onChangeView?: (next: AppView) => void;
 }
 
 function Sidebar(props: SidebarProps) {
@@ -99,8 +95,6 @@ function Sidebar(props: SidebarProps) {
     selectedSource,
     setSelectedSource,
     sourceSummaries,
-    view,
-    onChangeView,
     ...searchProps
   } = props;
 
@@ -145,11 +139,6 @@ function Sidebar(props: SidebarProps) {
             </button>
           </Tooltip>
         </div>
-        {view && onChangeView ? (
-          <div className="mt-3" style={headerNoDragStyle}>
-            <ViewSwitcher value={view} onChange={onChangeView} />
-          </div>
-        ) : null}
         <div className="mt-3" style={headerNoDragStyle}>
           <SidebarSearch
             query={query}
@@ -218,38 +207,6 @@ function Sidebar(props: SidebarProps) {
         )}
       </div>
     </aside>
-  );
-}
-
-function ViewSwitcher({ value, onChange }: { value: AppView; onChange: (next: AppView) => void }) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Top-level view"
-      className="flex items-center gap-0.5 rounded-md bg-foreground/[0.06] p-0.5"
-    >
-      {(["sessions", "prompts"] as AppView[]).map((id) => {
-        const active = value === id;
-        return (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(id)}
-            className={cn(
-              "flex-1 inline-flex items-center justify-center rounded px-2 py-1 text-[11px] font-medium transition-all",
-              "focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
-              active
-                ? "bg-background text-foreground shadow-[0_1px_2px_rgba(22,24,35,0.12),0_0_0_0.5px_rgba(22,24,35,0.08)]"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {id === "sessions" ? "Sessions" : "Prompts"}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 

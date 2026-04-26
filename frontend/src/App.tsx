@@ -25,12 +25,10 @@ import {
   type ToolBucket,
 } from "@/lib/transcript";
 import type {
-  AppView,
   DetailMessageHit,
   HistoryMode,
   MessageRoleFilter,
   OpenSessionOptions,
-  PromptOccurrence,
   RepoGroup,
   RepoOption,
   SearchResult,
@@ -40,13 +38,7 @@ import type {
   TimelineEvent,
 } from "@/lib/types";
 import { buildHistoryPreview } from "@/lib/format";
-import {
-  getSessionKeyFromUrl,
-  getViewFromUrl,
-  syncSessionKeyToUrl,
-  syncViewToUrl,
-} from "@/lib/url";
-import { PromptsView } from "@/components/prompts/PromptsView";
+import { getSessionKeyFromUrl, syncSessionKeyToUrl } from "@/lib/url";
 
 export default function App() {
   // ── Core data state ────────────────────────────────────────────────
@@ -94,10 +86,6 @@ export default function App() {
   const [tagInput, setTagInput] = useState("");
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // Top-level view selector. Mirrored to ?view=prompts so the Prompts tab is
-  // shareable and survives reload. Sessions is the implicit default and never
-  // emits the param.
-  const [view, setView] = useState<AppView>(() => getViewFromUrl());
   // Query that was actually submitted to the backend. Drives the sidebar
   // "hits" badge, so we never show stale "0 hits" for an un-searched term.
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -655,8 +643,6 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      const nextView = getViewFromUrl();
-      setView((prev) => (prev === nextView ? prev : nextView));
       const sessionKey = getSessionKeyFromUrl();
       if (!sessionKey || sessionKey === activeSessionKey) return;
       openSession(sessionKey, { historyMode: "skip" }).catch((error) => notify(String(error), "error"));
@@ -664,10 +650,6 @@ export default function App() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [activeSessionKey, openSession, notify]);
-
-  useEffect(() => {
-    if (getViewFromUrl() !== view) syncViewToUrl(view, "replace");
-  }, [view]);
 
   const hasQuery = submittedTokens.length > 0;
 
@@ -687,202 +669,94 @@ export default function App() {
     [handleJumpFromSidebar]
   );
 
-  // Jump from the prompts library back to the session that produced the
-  // occurrence: switch to the sessions view, open the session, and scroll to
-  // the matching segment. The setView call also flips ?view= back to its
-  // default so the URL reflects what the user is now looking at.
-  const handleJumpFromPrompt = useCallback(
-    (occurrence: PromptOccurrence) => {
-      setView("sessions");
-      void openSession(occurrence.session_key, {
-        targetSegment: occurrence.segment_index,
-        historyMode: "push",
-      });
-    },
-    [openSession]
-  );
-
   return (
     <div className="relative h-screen overflow-hidden bg-background text-foreground">
       <div className="flex h-full min-h-0">
-        {view === "sessions" ? (
-          <>
-            <div
-              className={cn(
-                "fixed inset-y-0 left-0 z-50 w-[min(360px,85vw)] transition-transform duration-200 ease-out shadow-editorial-lg",
-                "lg:static lg:z-auto lg:h-full lg:w-[352px] lg:shrink-0 lg:translate-x-0 lg:shadow-none",
-                sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-              )}
-            >
-              <Sidebar
-                className="h-full w-full"
-                query={query}
-                setQuery={setQuery}
-                onSubmit={() => void runSearch()}
-                loading={loading}
-                onReindex={() => void reindex()}
-                days={days}
-                setDays={setDays}
-                selectedRepo={selectedRepo}
-                setSelectedRepo={setSelectedRepo}
-                repoOptions={repoOptions}
-                selectedSource={selectedSource}
-                setSelectedSource={handleSelectSource}
-                sourceSummaries={sourceSummaries}
-                onlyStarred={onlyStarred}
-                setOnlyStarred={setOnlyStarred}
-                selectedTags={selectedTags}
-                setSelectedTags={setSelectedTags}
-                allTags={allTags}
-                tagPickerOpen={tagPickerOpen}
-                setTagPickerOpen={setTagPickerOpen}
-                filteredCount={filteredResults.length}
-                totalCount={results.length}
-                hasQuery={hasQuery}
-                groupedResults={groupedResults}
-                collapsedRepos={collapsedRepos}
-                onToggleRepo={handleToggleRepo}
-                activeSessionKey={activeSessionKey}
-                onOpenSession={handleSidebarOpenSession}
-                onToggleStar={toggleStar}
-                onJumpToHit={handleSidebarJumpToHit}
-                firstLoad={firstLoad}
-                view={view}
-                onChangeView={setView}
-              />
-            </div>
-
-            {sidebarOpen ? (
-              <div
-                onClick={() => setSidebarOpen(false)}
-                aria-hidden
-                className="fixed inset-0 z-40 bg-foreground/40 backdrop-blur-[2px] animate-fade-in lg:hidden"
-              />
-            ) : null}
-
-            <SessionView
-              className="flex-1 min-w-0"
-              onOpenSidebar={() => setSidebarOpen(true)}
-              detail={detail}
-              detailLoading={detailLoading}
-              messageRoleFilter={messageRoleFilter}
-              setMessageRoleFilter={setMessageRoleFilter}
-              toolBucketCounts={toolBucketCounts}
-              queryTokens={detailQueryTokens}
-              detailMessageHits={detailMessageHits}
-              activeMatch={activeMatch}
-              pulseKey={pulseKey}
-              onPrevMatch={() => jumpToMatch(activeMatch - 1)}
-              onNextMatch={() => jumpToMatch(activeMatch + 1)}
-              inSessionQuery={inSessionQuery}
-              setInSessionQuery={setInSessionQuery}
-              visibleEvents={visibleEvents}
-              visibleSubagents={visibleSubagents}
-              conversationViewportRef={conversationViewportRef}
-              registerEventRef={registerEventRef}
-              onToggleStar={() => detail && toggleStar(detail.session_key)}
-              onCopySessionId={onCopySessionId}
-              onExport={onExport}
-              exportLoading={exportLoading}
-              onDeleteSession={onDeleteSession}
-              tagInput={tagInput}
-              setTagInput={setTagInput}
-              onAddTag={(value) => (detail ? addTag(detail.session_key, value) : false)}
-              onRemoveTag={(tag) => detail && removeTag(detail.session_key, tag)}
-              statusText={status}
-            />
-          </>
-        ) : (
-          <PromptsViewShell
-            view={view}
-            onChangeView={setView}
+        <div
+          className={cn(
+            "fixed inset-y-0 left-0 z-50 w-[min(360px,85vw)] transition-transform duration-200 ease-out shadow-editorial-lg",
+            "lg:static lg:z-auto lg:h-full lg:w-[352px] lg:shrink-0 lg:translate-x-0 lg:shadow-none",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          )}
+        >
+          <Sidebar
+            className="h-full w-full"
+            query={query}
+            setQuery={setQuery}
+            onSubmit={() => void runSearch()}
+            loading={loading}
+            onReindex={() => void reindex()}
+            days={days}
+            setDays={setDays}
+            selectedRepo={selectedRepo}
+            setSelectedRepo={setSelectedRepo}
+            repoOptions={repoOptions}
+            selectedSource={selectedSource}
+            setSelectedSource={handleSelectSource}
             sourceSummaries={sourceSummaries}
-            repoCatalog={repoCatalog}
-            onJumpToOccurrence={handleJumpFromPrompt}
-            onNotify={notify}
+            onlyStarred={onlyStarred}
+            setOnlyStarred={setOnlyStarred}
+            selectedTags={selectedTags}
+            setSelectedTags={setSelectedTags}
+            allTags={allTags}
+            tagPickerOpen={tagPickerOpen}
+            setTagPickerOpen={setTagPickerOpen}
+            filteredCount={filteredResults.length}
+            totalCount={results.length}
+            hasQuery={hasQuery}
+            groupedResults={groupedResults}
+            collapsedRepos={collapsedRepos}
+            onToggleRepo={handleToggleRepo}
+            activeSessionKey={activeSessionKey}
+            onOpenSession={handleSidebarOpenSession}
+            onToggleStar={toggleStar}
+            onJumpToHit={handleSidebarJumpToHit}
+            firstLoad={firstLoad}
           />
-        )}
+        </div>
+
+        {sidebarOpen ? (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden
+            className="fixed inset-0 z-40 bg-foreground/40 backdrop-blur-[2px] animate-fade-in lg:hidden"
+          />
+        ) : null}
+
+        <SessionView
+          className="flex-1 min-w-0"
+          onOpenSidebar={() => setSidebarOpen(true)}
+          detail={detail}
+          detailLoading={detailLoading}
+          messageRoleFilter={messageRoleFilter}
+          setMessageRoleFilter={setMessageRoleFilter}
+          toolBucketCounts={toolBucketCounts}
+          queryTokens={detailQueryTokens}
+          detailMessageHits={detailMessageHits}
+          activeMatch={activeMatch}
+          pulseKey={pulseKey}
+          onPrevMatch={() => jumpToMatch(activeMatch - 1)}
+          onNextMatch={() => jumpToMatch(activeMatch + 1)}
+          inSessionQuery={inSessionQuery}
+          setInSessionQuery={setInSessionQuery}
+          visibleEvents={visibleEvents}
+          visibleSubagents={visibleSubagents}
+          conversationViewportRef={conversationViewportRef}
+          registerEventRef={registerEventRef}
+          onToggleStar={() => detail && toggleStar(detail.session_key)}
+          onCopySessionId={onCopySessionId}
+          onExport={onExport}
+          exportLoading={exportLoading}
+          onDeleteSession={onDeleteSession}
+          tagInput={tagInput}
+          setTagInput={setTagInput}
+          onAddTag={(value) => (detail ? addTag(detail.session_key, value) : false)}
+          onRemoveTag={(tag) => detail && removeTag(detail.session_key, tag)}
+          statusText={status}
+        />
       </div>
 
-      {view === "sessions" && detail ? (
-        <ScrollToTop onClick={scrollToTop} label="回到顶部" />
-      ) : null}
-    </div>
-  );
-}
-
-interface PromptsViewShellProps {
-  view: AppView;
-  onChangeView: (next: AppView) => void;
-  sourceSummaries: SourceSummary[];
-  repoCatalog: RepoOption[];
-  onJumpToOccurrence: (occurrence: PromptOccurrence) => void;
-  onNotify: (message: string, tone?: "default" | "success" | "error") => void;
-}
-
-/**
- * Wrapper around <PromptsView /> that pins the top-level Sessions/Prompts tab
- * on the leftmost rail so the user can flip back to the sessions view without
- * losing the prompt selection. Mirrors the brand header that lives inside
- * <Sidebar /> for the sessions view.
- */
-function PromptsViewShell({
-  view,
-  onChangeView,
-  sourceSummaries,
-  repoCatalog,
-  onJumpToOccurrence,
-  onNotify,
-}: PromptsViewShellProps) {
-  return (
-    <div className="flex flex-1 min-w-0 min-h-0 flex-col">
-      <ViewSwitcherHeader view={view} onChange={onChangeView} />
-      <PromptsView
-        className="flex-1"
-        sourceSummaries={sourceSummaries}
-        repoCatalog={repoCatalog}
-        onJumpToOccurrence={onJumpToOccurrence}
-        onNotify={onNotify}
-      />
-    </div>
-  );
-}
-
-interface ViewSwitcherHeaderProps {
-  view: AppView;
-  onChange: (next: AppView) => void;
-}
-
-function ViewSwitcherHeader({ view, onChange }: ViewSwitcherHeaderProps) {
-  return (
-    <div className="flex items-center justify-between border-b border-border bg-background-soft px-4 py-2.5">
-      <div
-        role="tablist"
-        aria-label="Top-level view"
-        className="flex items-center gap-0.5 rounded-md bg-foreground/[0.06] p-0.5"
-      >
-        {(["sessions", "prompts"] as AppView[]).map((id) => {
-          const active = view === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onChange(id)}
-              className={cn(
-                "min-w-[88px] inline-flex items-center justify-center rounded px-3 py-1 text-[11px] font-medium transition-all",
-                "focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
-                active
-                  ? "bg-background text-foreground shadow-[0_1px_2px_rgba(22,24,35,0.12),0_0_0_0.5px_rgba(22,24,35,0.08)]"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {id === "sessions" ? "Sessions" : "Prompts"}
-            </button>
-          );
-        })}
-      </div>
+      {detail ? <ScrollToTop onClick={scrollToTop} label="回到顶部" /> : null}
     </div>
   );
 }
