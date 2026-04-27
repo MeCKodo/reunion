@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * Keys are auto-prefixed with a namespace so different features can't collide.
  */
 
-const NAMESPACE = "logue";
+const NAMESPACE = "reunion";
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
