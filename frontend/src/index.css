@@ -5,64 +5,58 @@
 @tailwind utilities;
 
 :root {
-  /* TT (TikTok desktop) palette - light only.
-     Pure white surfaces · TT-red brand · cool neutral grays · square-leaning corners.
+  /* Twilight Ember palette — light only.
+     Warm paper surfaces · ember-orange brand · purple-mist neutrals.
      Values are raw HSL (H S% L%) consumed by Tailwind via hsl(var(--token)). */
 
-  --background: 0 0% 100%;          /* #ffffff main canvas */
-  --background-soft: 240 4% 95%;    /* #f1f1f2 sidebar / chip / hover surface */
-  --foreground: 230 22% 11%;        /* #161823 TT ink */
+  --background: 37 56% 97%;         /* #fbf7f1 warm paper white */
+  --background-soft: 37 47% 91%;    /* #f3ebde 米黄 sidebar / chip / hover surface */
+  --foreground: 250 10% 15%;        /* #252329 暖墨 — near-black with subtle warm tint */
 
-  --surface: 0 0% 100%;
-  --surface-foreground: 230 22% 11%;
+  --surface: 37 56% 97%;
+  --surface-foreground: 250 10% 15%;
 
-  --card: 0 0% 100%;
-  --card-foreground: 230 22% 11%;
+  --card: 37 56% 97%;
+  --card-foreground: 250 10% 15%;
 
-  --popover: 0 0% 100%;
-  --popover-foreground: 230 22% 11%;
+  --popover: 37 56% 97%;
+  --popover-foreground: 250 10% 15%;
 
-  --primary: 348 99% 58%;           /* TT red #fe2c55 — brand anchor only:
+  --primary: 22 64% 51%;            /* #d36a37 余烬 — brand anchor:
                                        starred icon, active session, brand sparkle, hit highlight,
-                                       primary CTA. NOT for decorative chrome. */
+                                       primary CTA. */
   --primary-foreground: 0 0% 100%;
-  --primary-hover: 348 75% 50%;     /* #e01f45 deeper red on hover */
-  --primary-soft: 351 86% 97%;      /* #fef1f3 pale rose wash — active session bg */
+  --primary-hover: 20 62% 45%;      /* #b85728 deeper ember on hover */
+  --primary-soft: 28 72% 95%;       /* #fbe9dd pale amber wash — active session bg */
 
-  --secondary: 240 4% 95%;          /* #f1f1f2 */
-  --secondary-foreground: 230 22% 11%;
+  --secondary: 37 47% 91%;          /* #f3ebde */
+  --secondary-foreground: 250 10% 15%;
 
-  --muted: 240 4% 95%;              /* #f1f1f2 */
-  --muted-foreground: 240 4% 46%;   /* #75757a slightly stronger than #86868b for contrast */
+  --muted: 37 47% 91%;              /* #f3ebde */
+  --muted-foreground: 265 8% 46%;   /* #736d7a 暖灰 — neutral with subtle purple warmth */
 
-  /* Accent split off from primary (was identical TT red, which made
-     every decorative element shout in the same brand voice). Now indigo
-     #5b66e8 — used for "filtered" labels, hit counters, tag chips,
-     claude-code badge, repo chip, and other neutral metadata that needs
-     a touch of color but should NOT compete with the brand red. */
-  --accent: 232 73% 64%;            /* #5b66e8 indigo */
+  --accent: 280 18% 48%;            /* #76647e 紫雾 — used for "filtered" labels,
+                                       hit counters, tag chips, badges, repo chip,
+                                       and other neutral metadata. */
   --accent-foreground: 0 0% 100%;
-  --accent-soft: 232 76% 95%;       /* #ecedfb pale indigo */
+  --accent-soft: 280 22% 94%;       /* #eee5ef pale lavender */
 
-  --highlight: 348 99% 58%;         /* TT red for hit text — brand anchor */
-  --highlight-bg: 351 86% 97%;      /* pale rose for hit background */
+  --highlight: 22 64% 51%;          /* ember for hit text — brand anchor */
+  --highlight-bg: 28 72% 92%;       /* pale amber for hit background */
 
-  /* Destructive shifts toward orange-red so it stays semantically distinct
-     from TT pink-red (used on tag remove hover). */
   --destructive: 0 72% 51%;         /* #de2929 */
   --destructive-foreground: 0 0% 100%;
 
-  --border: 240 2% 89%;             /* #e3e3e4 */
-  --border-strong: 240 4% 78%;      /* #c5c5cc cooler than Stripe gray */
-  --input: 240 2% 89%;
-  --ring: 348 99% 58%;              /* TT red focus ring */
+  --border: 38 35% 85%;             /* #e6dccb warm sand */
+  --border-strong: 38 27% 71%;      /* #c8b9a0 deeper sand */
+  --input: 38 35% 85%;
+  --ring: 22 64% 51%;               /* ember focus ring */
 
   --radius: 6px;
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui,
     "Helvetica Neue", Arial, sans-serif;
-  /* Kept as alias so legacy `font-serif` usages still resolve to Inter. */
   --font-serif: var(--font-sans);
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas,
     monospace;
@@ -235,9 +229,9 @@ body {
   font-size: 0.86em;
   padding: 0.12em 0.42em;
   border-radius: 4px;
-  background: #f1f3f5;
-  color: #3b4252;
-  border: 1px solid #e3e6ea;
+  background: hsl(var(--background-soft));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
   word-break: break-all;
 }
 
@@ -458,7 +452,7 @@ pre,
   background: hsl(var(--foreground) / 0.85);
 }
 
-/* Search hit highlight: pale rose wash + TT red text. */
+/* Search hit highlight: pale amber wash + ember text. */
 .hit-mark {
   background: hsl(var(--highlight-bg));
   color: hsl(var(--highlight));
@@ -512,7 +506,7 @@ pre,
   background-clip: padding-box;
 }
 
-/* Selection uses the brand purple at low opacity. */
+/* Selection uses the brand ember at low opacity. */
 ::selection {
   background: hsl(var(--primary) / 0.22);
   color: hsl(var(--foreground));

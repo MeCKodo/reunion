@@ -1,10 +1,12 @@
 import * as React from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClockAlignment, MessageRoleFilter, SourceId } from "@/lib/types";
 import { SOURCE_LABEL } from "@/lib/types";
 import {
-  TOOL_BUCKET_LABEL,
+  getToolBucketLabel,
   TOOL_BUCKET_ORDER,
   TOOL_ICONS,
   type ToolBucket,
@@ -28,15 +30,19 @@ interface ViewToolbarProps {
   clockAlignment?: ClockAlignment;
 }
 
-function buildRoleFilters(source: SourceId, hasSubagents: boolean): Array<{ value: MessageRoleFilter; label: string }> {
+function buildRoleFilters(
+  source: SourceId,
+  hasSubagents: boolean,
+  t: TFunction
+): Array<{ value: MessageRoleFilter; label: string }> {
   const assistantLabel = SOURCE_LABEL[source];
   const filters: Array<{ value: MessageRoleFilter; label: string }> = [
-    { value: "all", label: "All" },
-    { value: "user", label: "You" },
+    { value: "all", label: t("session.roleAll") },
+    { value: "user", label: t("session.roleYou") },
     { value: "assistant", label: assistantLabel },
-    { value: "tool", label: "Tool" },
+    { value: "tool", label: t("session.roleTool") },
   ];
-  if (hasSubagents) filters.push({ value: "subagent", label: "Subagent" });
+  if (hasSubagents) filters.push({ value: "subagent", label: t("session.roleSubagent") });
   return filters;
 }
 
@@ -92,7 +98,8 @@ function ViewToolbar({
   hasSubagents = false,
   clockAlignment,
 }: ViewToolbarProps) {
-  const roleFilters = buildRoleFilters(source, hasSubagents);
+  const { t } = useTranslation();
+  const roleFilters = buildRoleFilters(source, hasSubagents, t);
 
   // Only call out a fidelity warning when *all* timestamps are estimates
   // (Cursor session whose generations have rotated out of SQLite). When at
@@ -104,10 +111,10 @@ function ViewToolbar({
     const total = clockAlignment?.total ?? 0;
     if (matched > 0 || total === 0) return null;
     return {
-      text: "all timestamps estimated",
-      tip: "Cursor's chat log has no per-event timestamps. The session's start/end are real, but every message time you see is estimated by spreading messages evenly across the session window.",
+      text: t("session.allTimestampsEstimated"),
+      tip: t("session.timestampEstimatedTip"),
     };
-  }, [source, clockAlignment]);
+  }, [source, clockAlignment, t]);
 
   // Surface only the buckets that actually appear in this session, sorted by
   // the canonical semantic order so the layout stays predictable across
@@ -154,14 +161,14 @@ function ViewToolbar({
                       isActive ? "all" : (`tool:${bucket}` as MessageRoleFilter)
                     )
                   }
-                  title={`${TOOL_BUCKET_LABEL[bucket]} tools · ${toolBucketCounts[bucket]}`}
+                  title={`${getToolBucketLabel(bucket)} tools · ${toolBucketCounts[bucket]}`}
                   className={cn(
                     "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] transition-colors",
                     isActive ? palette.active : cn("bg-background", palette.idle)
                   )}
                 >
                   {Icon ? <Icon className="h-3 w-3" strokeWidth={2.25} /> : null}
-                  <span className="font-medium">{TOOL_BUCKET_LABEL[bucket]}</span>
+                  <span className="font-medium">{getToolBucketLabel(bucket)}</span>
                   <span
                     className={cn(
                       "tabular-nums",
@@ -203,21 +210,23 @@ function ViewToolbar({
         {queryActive && !inSessionQuery ? (
           <div className="flex items-center gap-1 rounded-md border border-border-strong bg-surface px-2 py-1 font-mono text-[11px] text-foreground">
             <span className="text-muted-foreground">
-              {hitsCount ? `${activeMatch + 1}/${hitsCount}` : "0 hits"}
+              {hitsCount
+                ? t("session.hitsNav", { current: activeMatch + 1, total: hitsCount })
+                : t("session.zeroHits")}
             </span>
             {hitsCount > 0 ? (
               <>
                 <button
                   className="rounded-sm p-0.5 text-muted-foreground hover:bg-background-soft hover:text-foreground"
                   onClick={onPrevMatch}
-                  title="Previous match"
+                  title={t("session.previousMatch")}
                 >
                   <ChevronUp className="h-3.5 w-3.5" />
                 </button>
                 <button
                   className="rounded-sm p-0.5 text-muted-foreground hover:bg-background-soft hover:text-foreground"
                   onClick={onNextMatch}
-                  title="Next match"
+                  title={t("session.nextMatch")}
                 >
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
@@ -270,6 +279,7 @@ function SessionSearchBox({
   onPrevMatch,
   onNextMatch,
 }: SessionSearchBoxProps) {
+  const { t } = useTranslation();
   const trimmed = value.trim();
   const handleKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
@@ -306,8 +316,8 @@ function SessionSearchBox({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKey}
-        placeholder="Find in session"
-        aria-label="Find in session"
+        placeholder={t("session.findInSession")}
+        aria-label={t("session.findInSession")}
         className="h-6 w-32 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none sm:w-44"
       />
       {/* Keyboard-hint key-cap. Only surfaces in the resting state (no query
@@ -332,8 +342,8 @@ function SessionSearchBox({
             type="button"
             className="rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-background-soft hover:text-foreground"
             onClick={onPrevMatch}
-            title="Previous match (Shift+Enter)"
-            aria-label="Previous match"
+            title={t("session.previousMatchShortcut")}
+            aria-label={t("session.previousMatch")}
           >
             <ChevronUp className="h-3.5 w-3.5" />
           </button>
@@ -341,8 +351,8 @@ function SessionSearchBox({
             type="button"
             className="rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-background-soft hover:text-foreground"
             onClick={onNextMatch}
-            title="Next match (Enter)"
-            aria-label="Next match"
+            title={t("session.nextMatchShortcut")}
+            aria-label={t("session.nextMatch")}
           >
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
@@ -353,8 +363,8 @@ function SessionSearchBox({
           type="button"
           className="rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-background-soft hover:text-foreground"
           onClick={() => onChange("")}
-          title="Clear (Esc)"
-          aria-label="Clear search"
+          title={t("session.clearSearch")}
+          aria-label={t("session.clearSearchLabel")}
         >
           <X className="h-3.5 w-3.5" />
         </button>

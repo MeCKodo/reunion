@@ -145,10 +145,10 @@ export type OpenSessionOptions = {
 export const SESSION_QUERY_PARAM = "session";
 
 export const DAY_OPTIONS = [
-  { value: "0", label: "All time" },
-  { value: "7", label: "Last 7d" },
-  { value: "30", label: "Last 30d" },
-  { value: "60", label: "Last 60d" },
-  { value: "90", label: "Last 90d" },
-  { value: "180", label: "Last 180d" },
+  { value: "0", labelKey: "dayOptions.allTime" },
+  { value: "7", labelKey: "dayOptions.last7d" },
+  { value: "30", labelKey: "dayOptions.last30d" },
+  { value: "60", labelKey: "dayOptions.last60d" },
+  { value: "90", labelKey: "dayOptions.last90d" },
+  { value: "180", labelKey: "dayOptions.last180d" },
 ] as const;

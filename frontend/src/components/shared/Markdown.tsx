@@ -150,61 +150,112 @@ interface MarkdownProps {
   className?: string;
 }
 
-function Markdown({ source, queryTokens = [], className }: MarkdownProps) {
-  const hl = (children: ReactNode) => highlightChildren(children, queryTokens);
+// remark/rehype plugin tuples are pure references — define them once at module
+// scope so ReactMarkdown's plugin pipeline doesn't reset every render.
+const REMARK_PLUGINS = [remarkGfm, remarkCursorCodeRef] as const;
+const REHYPE_PLUGINS = [
+  [rehypeHighlight, { detect: true, ignoreMissing: true }],
+] as const;
+
+function MarkdownImpl({ source, queryTokens = [], className }: MarkdownProps) {
+  // Building a fresh `components` object every render forces ReactMarkdown to
+  // re-key the entire rendered tree, which torpedoes any internal memoization.
+  // Tying the object identity to `queryTokens` (with a join key) means we
+  // only rebuild when the tokens that drive `highlightChildren` actually
+  // change — and stays stable when only the parent re-renders for unrelated
+  // reasons (e.g. activeMatch on a sibling).
+  const tokensKey = queryTokens.join("\u0001");
+  const components = React.useMemo(() => {
+    const hl = (children: ReactNode) => highlightChildren(children, queryTokens);
+    return {
+      p: ({ children }: { children?: ReactNode }) => <p>{hl(children)}</p>,
+      h1: ({ children }: { children?: ReactNode }) => <h1>{hl(children)}</h1>,
+      h2: ({ children }: { children?: ReactNode }) => <h2>{hl(children)}</h2>,
+      h3: ({ children }: { children?: ReactNode }) => <h3>{hl(children)}</h3>,
+      h4: ({ children }: { children?: ReactNode }) => <h4>{hl(children)}</h4>,
+      h5: ({ children }: { children?: ReactNode }) => <h5>{hl(children)}</h5>,
+      h6: ({ children }: { children?: ReactNode }) => <h6>{hl(children)}</h6>,
+      li: ({ children }: { children?: ReactNode }) => <li>{hl(children)}</li>,
+      strong: ({ children }: { children?: ReactNode }) => (
+        <strong>{hl(children)}</strong>
+      ),
+      em: ({ children }: { children?: ReactNode }) => <em>{hl(children)}</em>,
+      blockquote: ({ children }: { children?: ReactNode }) => (
+        <blockquote>{hl(children)}</blockquote>
+      ),
+      a: ({ children, href }: { children?: ReactNode; href?: string }) => (
+        <a href={href} target="_blank" rel="noreferrer">
+          {hl(children)}
+        </a>
+      ),
+      pre: ({ children }: { children?: ReactNode }) => {
+        const { lang, file } = extractCodeMeta(children);
+        return (
+          <pre data-lang={lang} data-file={file}>
+            {children}
+          </pre>
+        );
+      },
+      code: ({
+        className: codeClassName,
+        children,
+      }: {
+        className?: string;
+        children?: ReactNode;
+      }) => <code className={codeClassName}>{hl(children)}</code>,
+      img: ({
+        src,
+        alt,
+        title,
+      }: {
+        src?: unknown;
+        alt?: unknown;
+        title?: unknown;
+      }) => (
+        <MarkdownImage
+          src={typeof src === "string" ? src : undefined}
+          alt={typeof alt === "string" ? alt : undefined}
+          title={typeof title === "string" ? title : undefined}
+        />
+      ),
+      table: ({ children }: { children?: ReactNode }) => (
+        <div className="markdown-table-wrap">
+          <table>{children}</table>
+        </div>
+      ),
+      td: ({ children }: { children?: ReactNode }) => <td>{hl(children)}</td>,
+      th: ({ children }: { children?: ReactNode }) => <th>{hl(children)}</th>,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokensKey]);
+
   return (
     <div className={cn("markdown-body", className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkCursorCodeRef]}
-        rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
-        components={{
-          p: ({ children }) => <p>{hl(children)}</p>,
-          h1: ({ children }) => <h1>{hl(children)}</h1>,
-          h2: ({ children }) => <h2>{hl(children)}</h2>,
-          h3: ({ children }) => <h3>{hl(children)}</h3>,
-          h4: ({ children }) => <h4>{hl(children)}</h4>,
-          h5: ({ children }) => <h5>{hl(children)}</h5>,
-          h6: ({ children }) => <h6>{hl(children)}</h6>,
-          li: ({ children }) => <li>{hl(children)}</li>,
-          strong: ({ children }) => <strong>{hl(children)}</strong>,
-          em: ({ children }) => <em>{hl(children)}</em>,
-          blockquote: ({ children }) => <blockquote>{hl(children)}</blockquote>,
-          a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noreferrer">
-              {hl(children)}
-            </a>
-          ),
-          pre: ({ children }) => {
-            const { lang, file } = extractCodeMeta(children);
-            return (
-              <pre data-lang={lang} data-file={file}>
-                {children}
-              </pre>
-            );
-          },
-          code: ({ className: codeClassName, children }) => (
-            <code className={codeClassName}>{hl(children)}</code>
-          ),
-          img: ({ src, alt, title }) => (
-            <MarkdownImage
-              src={typeof src === "string" ? src : undefined}
-              alt={typeof alt === "string" ? alt : undefined}
-              title={typeof title === "string" ? title : undefined}
-            />
-          ),
-          table: ({ children }) => (
-            <div className="markdown-table-wrap">
-              <table>{children}</table>
-            </div>
-          ),
-          td: ({ children }) => <td>{hl(children)}</td>,
-          th: ({ children }) => <th>{hl(children)}</th>,
-        }}
+        remarkPlugins={REMARK_PLUGINS as never}
+        rehypePlugins={REHYPE_PLUGINS as never}
+        components={components}
       >
         {source}
       </ReactMarkdown>
     </div>
   );
 }
+
+// Memoize on (source, tokens, className). Without this, every keystroke that
+// changed an unrelated piece of parent state would force ReactMarkdown to
+// re-parse the markdown AST and re-run rehype-highlight — by far the most
+// expensive cost on screen for long sessions.
+const Markdown = React.memo(MarkdownImpl, (prev, next) => {
+  if (prev.source !== next.source) return false;
+  if (prev.className !== next.className) return false;
+  const a = prev.queryTokens ?? [];
+  const b = next.queryTokens ?? [];
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+});
 
 export { Markdown };

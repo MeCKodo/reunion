@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { formatClock } from "@/lib/format";
 import {
@@ -26,7 +27,12 @@ interface MessageCardProps {
   isMatch: boolean;
   isActiveMatch: boolean;
   pulseKey?: number;
-  registerRef?: (node: HTMLDivElement | null) => void;
+  /**
+   * Stable callback that the parent registers once per session. The card
+   * forwards its own event_id so the parent doesn't need an inline closure
+   * per event (which would defeat React.memo).
+   */
+  registerRef?: (eventId: string, node: HTMLDivElement | null) => void;
   source?: SourceId;
   /**
    * tool_result event paired with this tool_use card by `tool_call_id`. When
@@ -36,7 +42,7 @@ interface MessageCardProps {
   pairedResult?: TimelineEvent;
 }
 
-function MessageCard({
+function MessageCardImpl({
   event,
   queryTokens,
   isMatch,
@@ -46,6 +52,18 @@ function MessageCard({
   source,
   pairedResult,
 }: MessageCardProps) {
+  // Bind a stable ref callback that captures the parent's stable registerRef
+  // along with our own event_id. Without this, the parent would have to pass
+  // an inline closure per event, which would change identity every render
+  // and defeat React.memo.
+  const handleRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      registerRef?.(event.event_id, node);
+    },
+    [registerRef, event.event_id]
+  );
+
+  const { t } = useTranslation();
   const meta = roleMeta(
     event.category,
     event.tool_name,
@@ -88,7 +106,7 @@ function MessageCard({
   return (
     <div
       className="flex gap-3 items-start"
-      ref={registerRef}
+      ref={handleRef}
       data-event-id={event.event_id}
     >
       <div
@@ -117,7 +135,7 @@ function MessageCard({
           <span>{formatClock(event.ts)}</span>
           {isActiveMatch ? (
             <span className="ml-1 rounded-sm bg-accent/15 px-1.5 py-[1px] text-[9px] text-accent uppercase tracking-overline">
-              current match
+              {t("session.currentMatch")}
             </span>
           ) : null}
         </div>
@@ -174,8 +192,8 @@ function MessageCard({
                 )}
               >
                 {source === "cursor"
-                  ? "Cursor source omits tool output by design"
-                  : "tool output missing"}
+                  ? t("session.cursorOmitsOutput")
+                  : t("session.toolOutputMissing")}
               </div>
             )
           ) : null}
@@ -184,5 +202,31 @@ function MessageCard({
     </div>
   );
 }
+
+// React.memo with shallow prop comparison. The hot path is keystroke-driven:
+// query, activeMatch and pulseKey change on every input, so we re-render only
+// the cards whose visible state actually flips. `queryTokens` reference can
+// vary even when content is equal, so we compare its tokens explicitly.
+function arePropsEqual(prev: MessageCardProps, next: MessageCardProps) {
+  if (prev.event !== next.event) return false;
+  if (prev.isMatch !== next.isMatch) return false;
+  if (prev.isActiveMatch !== next.isActiveMatch) return false;
+  // pulseKey only matters for the currently-active card. For inactive cards
+  // the value doesn't affect render output, so skip the prop and let them
+  // stay mounted across pulse cycles.
+  if (next.isActiveMatch && prev.pulseKey !== next.pulseKey) return false;
+  if (prev.source !== next.source) return false;
+  if (prev.pairedResult !== next.pairedResult) return false;
+  if (prev.registerRef !== next.registerRef) return false;
+  const a = prev.queryTokens;
+  const b = next.queryTokens;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+const MessageCard = React.memo(MessageCardImpl, arePropsEqual);
 
 export { MessageCard };

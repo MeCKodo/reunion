@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Menu, NotebookPen } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { StatusBar, StatusItem, StatusDivider } from "@/components/ui/status-bar";
@@ -60,6 +61,7 @@ interface SessionViewProps {
 }
 
 function SessionView(props: SessionViewProps) {
+  const { t } = useTranslation();
   const {
     detail,
     detailLoading,
@@ -122,7 +124,7 @@ function SessionView(props: SessionViewProps) {
       <button
         type="button"
         onClick={onOpenSidebar}
-        aria-label="Open sidebar"
+        aria-label={t("session.openSidebar")}
         style={noDragStyle}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border-strong bg-surface text-muted-foreground transition-colors hover:bg-background-soft hover:text-foreground"
       >
@@ -132,7 +134,7 @@ function SessionView(props: SessionViewProps) {
         style={noDragStyle}
         className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground"
       >
-        Sessions
+        {t("session.sessions")}
       </span>
     </div>
   ) : null;
@@ -159,9 +161,9 @@ function SessionView(props: SessionViewProps) {
         {mobileTopBar}
         {electronEmptyTopDragBar}
         <EmptyState
-          eyebrow="ready"
-          title="Select a conversation"
-          description="Pick any thread from the panel on the left, or search across every repository to begin."
+          eyebrow={t("session.readyEyebrow")}
+          title={t("session.selectConversation")}
+          description={t("session.selectConversationDesc")}
           icon={<NotebookPen className="h-5 w-5" />}
         />
       </section>
@@ -232,19 +234,24 @@ function SessionView(props: SessionViewProps) {
       </div>
 
       <StatusBar>
-        <StatusItem>CONVERSATION</StatusItem>
+        <StatusItem>{t("session.conversation")}</StatusItem>
         <StatusDivider />
         <StatusItem>
-          {visibleEvents.length} events
+          {t("session.events", { count: visibleEvents.length })}
           {visibleSubagents.length > 0
-            ? ` · ${visibleSubagents.length} subagents`
+            ? ` · ${t("session.subagents", { count: visibleSubagents.length })}`
             : ""}
         </StatusItem>
         {queryTokens.length > 0 ? (
           <>
             <StatusDivider />
             <StatusItem tone="accent">
-              {detailMessageHits.length ? `${activeMatch + 1}/${detailMessageHits.length}` : "0"} hits
+              {detailMessageHits.length
+                ? t("session.hitsNav", {
+                    current: activeMatch + 1,
+                    total: detailMessageHits.length,
+                  })
+                : t("session.zeroHits")}
             </StatusItem>
           </>
         ) : null}

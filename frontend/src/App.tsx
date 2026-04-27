@@ -1,6 +1,8 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { ScrollToTop } from "@/components/shared/ScrollToTop";
+import { TaskCenter } from "@/components/task-center/TaskCenter";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { SessionView } from "@/components/session-view/SessionView";
 import { useToast } from "@/components/ui/toast";
@@ -17,6 +19,7 @@ import {
   fetchSources,
   postOpenPath,
   postReindex,
+  SearchAbortedError,
   type ExportKind,
 } from "@/lib/api";
 import { decodeEntities } from "@/lib/format";
@@ -43,6 +46,7 @@ import { buildHistoryPreview } from "@/lib/format";
 import { getSessionKeyFromUrl, syncSessionKeyToUrl } from "@/lib/url";
 
 export default function App() {
+  const { t } = useTranslation();
   // ── Core data state ────────────────────────────────────────────────
   const [results, setResults] = useState<SearchResult[]>([]);
   const [repoCatalog, setRepoCatalog] = useState<RepoOption[]>([]);
@@ -65,7 +69,7 @@ export default function App() {
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const [status, setStatus] = useState("Ready");
+  const [status, setStatus] = useState(() => t("common.ready"));
   const [loading, setLoading] = useState(false);
   const [firstLoad, setFirstLoad] = useState(true);
   const [messageRoleFilter, setMessageRoleFilter] = useState<MessageRoleFilter>("all");
@@ -107,6 +111,14 @@ export default function App() {
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
   const initialUrlSessionKeyRef = useRef(getSessionKeyFromUrl());
   const didInitRef = useRef(false);
+  // Holds the AbortController for the most recent in-flight search so that
+  // a fresh keystroke can cancel the previous request and we never paint
+  // stale results when an older response arrives last.
+  const searchAbortRef = useRef<AbortController | null>(null);
+  // Monotonic id incremented on every search dispatch. After awaiting the
+  // request we compare against the latest id and bail out if a newer search
+  // has started — even if AbortController didn't fire in time.
+  const searchSeqRef = useRef(0);
 
   // ── Toast helpers ──────────────────────────────────────────────────
   const { push: pushToast, dismiss: dismissToast } = useToast();
@@ -219,15 +231,17 @@ export default function App() {
 
   const visibleHistoryEntries = useMemo(
     () => [
-      ...visibleEvents.map((event) => ({ event, sourceLabel: "Main session" })),
+      ...visibleEvents.map((event) => ({ event, sourceLabel: t("session.mainSession") })),
       ...visibleSubagents.flatMap((subagent) =>
         subagent.filteredEvents.map((event) => ({
           event,
-          sourceLabel: `Subagent · ${subagent.title || subagent.session_id}`,
+          sourceLabel: t("session.subagentSource", {
+            title: subagent.title || subagent.session_id,
+          }),
         }))
       ),
     ],
-    [visibleEvents, visibleSubagents]
+    [visibleEvents, visibleSubagents, t]
   );
 
   const detailMessageHits = useMemo<DetailMessageHit[]>(() => {
@@ -327,19 +341,28 @@ export default function App() {
         const data = await fetchSession(sessionKey);
         setDetail(data);
       } catch (error) {
-        notify(`Failed to load session: ${String(error)}`, "error");
+        notify(t("common.loadFailed", { error: String(error) }), "error");
       } finally {
         setDetailLoading(false);
       }
     },
-    [notify]
+    [notify, t]
   );
 
   const runSearch = useCallback(
     async (options: { preferredSessionKey?: string; overrideQuery?: string } = {}) => {
       const effectiveQuery = options.overrideQuery ?? query;
+
+      // Cancel any in-flight request so the network/server stop wasting work
+      // on a query the user has already moved on from. Then claim the current
+      // dispatch id; only the freshest dispatch is allowed to mutate state.
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+      const seq = ++searchSeqRef.current;
+
       setLoading(true);
-      setStatus("Searching…");
+      setStatus(t("common.searching"));
       try {
         const { results: items, count } = await fetchSearch({
           query: effectiveQuery,
@@ -347,15 +370,24 @@ export default function App() {
           repo: selectedRepo,
           source: selectedSource,
           limit: 300,
+          signal: controller.signal,
         });
+
+        // A newer search has already kicked off — drop these stale results
+        // on the floor instead of letting them overwrite fresher state.
+        if (seq !== searchSeqRef.current) return;
+
         setResults(items);
         setSubmittedQuery(effectiveQuery);
-        setStatus(`${count} ${count === 1 ? "result" : "results"}`);
+        setStatus(t("common.resultCount", { count }));
 
         const preferred = options.preferredSessionKey || "";
         if (preferred) {
           if (activeSessionKey !== preferred || !detail) {
             await openSession(preferred, { historyMode: "skip" });
+            // Bail if a newer search started while we were loading the
+            // session (e.g. user kept typing during fetchSession).
+            if (seq !== searchSeqRef.current) return;
             setActiveMatch(0);
           }
           return;
@@ -364,36 +396,48 @@ export default function App() {
         const hasActive = items.some((item) => item.session_key === activeSessionKey);
         if (items.length > 0 && (!activeSessionKey || !hasActive)) {
           await openSession(items[0].session_key, { historyMode: "replace" });
+          if (seq !== searchSeqRef.current) return;
           setActiveMatch(0);
         }
       } catch (error) {
-        setStatus("Search failed");
-        notify(`Search failed: ${String(error)}`, "error");
+        // Aborted requests are not failures — they are the normal outcome
+        // of fast typing. Stay silent so the toast stack doesn't spam.
+        if (error instanceof SearchAbortedError) return;
+        if (seq !== searchSeqRef.current) return;
+        setStatus(t("common.searchFailed"));
+        notify(t("common.searchFailedError", { error: String(error) }), "error");
       } finally {
-        setLoading(false);
-        setFirstLoad(false);
+        // Only the latest dispatch should clear the busy flag, otherwise an
+        // aborted older request would prematurely flip the spinner off.
+        if (seq === searchSeqRef.current) {
+          setLoading(false);
+          setFirstLoad(false);
+        }
       }
     },
-    [activeSessionKey, days, detail, notify, openSession, query, selectedRepo, selectedSource]
+    [activeSessionKey, days, detail, notify, openSession, query, selectedRepo, selectedSource, t]
   );
 
   const reindex = useCallback(async () => {
-    const toastId = pushToast("Reindexing sessions…", "loading");
-    setStatus("Indexing…");
+    const toastId = pushToast(t("common.reindexing"), "loading");
+    setStatus(t("common.indexing"));
     try {
       const data = await postReindex();
       dismissToast(toastId);
-      notify(`Indexed ${data.stats.sessions_indexed} sessions`, "success");
-      setStatus("Ready");
+      notify(
+        t("common.indexedSessions", { count: data.stats.sessions_indexed }),
+        "success"
+      );
+      setStatus(t("common.ready"));
       await loadRepoOptions();
       await loadSourceSummaries();
       await runSearch();
     } catch (error) {
       dismissToast(toastId);
-      setStatus("Reindex failed");
-      notify(`Reindex failed: ${String(error)}`, "error");
+      setStatus(t("common.reindexFailed"));
+      notify(t("common.reindexFailed") + ": " + String(error), "error");
     }
-  }, [dismissToast, notify, pushToast, runSearch]);
+  }, [dismissToast, notify, pushToast, runSearch, t]);
 
   const loadRepoOptions = useCallback(async () => {
     try {
@@ -441,11 +485,11 @@ export default function App() {
         document.execCommand("copy");
         input.remove();
       }
-      notify("Session ID copied", "success");
+      notify(t("common.sessionIdCopied"), "success");
     } catch (error) {
-      notify(`Copy failed: ${String(error)}`, "error");
+      notify(t("common.copyFailed", { error: String(error) }), "error");
     }
-  }, [detail, notify]);
+  }, [detail, notify, t]);
 
   // Triggered by the Smart Rules / Smart Skill buttons in the session
   // header. Instead of going straight to a download we now open a dialog
@@ -481,7 +525,7 @@ export default function App() {
           }
           dismissToast(id);
         } catch (error) {
-          notify(`Open failed: ${String(error)}`, "error");
+          notify(t("common.openFailed", { error: String(error) }), "error");
         }
       };
       const toastId = `export-${Date.now()}`;
@@ -489,7 +533,9 @@ export default function App() {
         <span className="flex flex-col gap-1.5">
           <span>
             <strong className="font-semibold">
-              Smart {kind === "skill" ? "Skill" : "Rules"} written
+              {t("export.smartWritten", {
+                kind: kind === "skill" ? t("export.skill") : t("export.rules"),
+              })}
             </strong>{" "}
             <span className="text-muted-foreground">({info.mode})</span>
           </span>
@@ -502,14 +548,14 @@ export default function App() {
               onClick={action("open", toastId)}
               className="rounded border border-border-strong bg-surface px-2 py-0.5 text-[11.5px] text-foreground hover:bg-background-soft"
             >
-              Open file
+              {t("export.openFile")}
             </button>
             <button
               type="button"
               onClick={action("reveal", toastId)}
               className="rounded border border-border-strong bg-surface px-2 py-0.5 text-[11.5px] text-foreground hover:bg-background-soft"
             >
-              Reveal in Finder
+              {t("export.revealInFinder")}
             </button>
           </span>
         </span>,
@@ -517,7 +563,7 @@ export default function App() {
         12000
       );
     },
-    [dismissToast, notify, pushToast]
+    [dismissToast, notify, pushToast, t]
   );
 
   // Reachable by the dialog when the user explicitly opts to download rather
@@ -531,7 +577,7 @@ export default function App() {
       if (!detail) return;
       setExportLoading(kind);
       const toastId = pushToast(
-        `Generating Smart ${kind === "skill" ? "Skill" : "Rules"} via AI… this can take ~30s`,
+        t("export.generatingAI", { kind: kind === "skill" ? "Skill" : "Rules" }),
         "loading"
       );
       try {
@@ -543,7 +589,7 @@ export default function App() {
         );
         downloadBlob(blob, filename);
         dismissToast(toastId);
-        const fileLine = `Saved to your Downloads folder · ${filename}`;
+        const fileLine = t("export.savedToDownloads", { filename });
         if (mode === "smart") {
           notify(`Smart ${kind.toUpperCase()} ready · ${fileLine}`, "success", 6000);
         } else {
@@ -556,16 +602,12 @@ export default function App() {
         }
       } catch (error) {
         dismissToast(toastId);
-        notify(
-          `Export failed: ${String(error)} — check Settings if your CLI is signed in.`,
-          "error",
-          8000
-        );
+        notify(t("common.exportFailed", { error: String(error) }), "error", 8000);
       } finally {
         setExportLoading("");
       }
     },
-    [detail, dismissToast, notify, pushToast]
+    [detail, dismissToast, notify, pushToast, t]
   );
 
   // Permanently remove the currently open session: nukes the transcript file
@@ -577,7 +619,7 @@ export default function App() {
     if (!detail) return;
     const sessionKey = detail.session_key;
     const friendlyTitle = decodeEntities(detail.title || detail.session_id);
-    const toastId = pushToast(`Deleting "${friendlyTitle}"…`, "loading");
+    const toastId = pushToast(t("common.deletingSession", { title: friendlyTitle }), "loading");
     try {
       await deleteSession(sessionKey);
       setResults((prev) => prev.filter((item) => item.session_key !== sessionKey));
@@ -587,12 +629,12 @@ export default function App() {
         syncSessionKeyToUrl("", "replace");
       }
       dismissToast(toastId);
-      notify(`Deleted "${friendlyTitle}"`, "success");
+      notify(t("common.deletedSession", { title: friendlyTitle }), "success");
       loadRepoOptions().catch(() => undefined);
       loadSourceSummaries().catch(() => undefined);
     } catch (error) {
       dismissToast(toastId);
-      notify(`Delete failed: ${String(error)}`, "error");
+      notify(t("common.deleteFailed", { error: String(error) }), "error");
       throw error;
     }
   }, [detail, dismissToast, loadRepoOptions, loadSourceSummaries, notify, pushToast]);
@@ -683,13 +725,23 @@ export default function App() {
 
   // Auto-search as the user types (debounced). Uses the deferred query so
   // React can batch updates during fast typing.
+  //
+  // Empty / cleared input fires immediately so users get the "all sessions"
+  // view back without lag. Very short queries (1-2 chars) wait a bit longer
+  // to dodge the burst of high-cardinality matches while typing the first
+  // letters. Anything longer is debounced just enough to coalesce a typing
+  // burst — combined with AbortController in `runSearch`, the user always
+  // sees results for the latest term they actually settled on.
   useEffect(() => {
     if (!didInitRef.current) return;
+    const trimmedLen = deferredQuery.trim().length;
+    const delay = trimmedLen === 0 ? 0 : trimmedLen <= 2 ? 250 : 150;
     const id = window.setTimeout(() => {
-      runSearch({ overrideQuery: deferredQuery }).catch((error) =>
-        notify(String(error), "error")
-      );
-    }, 250);
+      runSearch({ overrideQuery: deferredQuery }).catch((error) => {
+        if (error instanceof SearchAbortedError) return;
+        notify(String(error), "error");
+      });
+    }, delay);
     return () => window.clearTimeout(id);
   }, [deferredQuery]);
 
@@ -862,11 +914,12 @@ export default function App() {
           onClose={() => setExportDialogKind(null)}
           sessionKey={detail.session_key}
           kind={exportDialogKind}
-          onWritten={(info) => handleExportWritten(exportDialogKind, info)}
         />
       ) : null}
 
-      {detail ? <ScrollToTop onClick={scrollToTop} label="回到顶部" /> : null}
+      {detail ? <ScrollToTop onClick={scrollToTop} label={t("common.back")} /> : null}
+
+      <TaskCenter />
     </div>
   );
 }
