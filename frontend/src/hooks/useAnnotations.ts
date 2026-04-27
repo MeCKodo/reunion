@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import i18n from "@/i18n";
 import {
   fetchAnnotations,
   putAnnotation as putAnnotationApi,
@@ -83,7 +84,7 @@ export function useAnnotations({ setResults, setDetail, onError }: UseAnnotation
         return data;
       } catch (error) {
         applyLocal(sessionKey, prev || null);
-        onError(`Annotation save failed: ${String(error)}`);
+        onError(i18n.t("common.annotationSaveFailed", { error: String(error) }));
         return null;
       }
     },

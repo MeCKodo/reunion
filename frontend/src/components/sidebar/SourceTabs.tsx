@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { SourceFilter, SourceId, SourceSummary } from "@/lib/types";
 import { SOURCE_LABEL } from "@/lib/types";
@@ -13,11 +14,11 @@ interface SourceTabsProps {
 
 const TAB_ORDER: SourceFilter[] = ["all", "cursor", "claude-code", "codex"];
 
-function labelFor(id: SourceFilter): string {
-  return id === "all" ? "All" : SOURCE_LABEL[id as SourceId];
-}
-
 function SourceTabs({ value, onChange, sources, totalCount, className }: SourceTabsProps) {
+  const { t } = useTranslation();
+  function labelFor(id: SourceFilter): string {
+    return id === "all" ? t("sourceTabs.all") : SOURCE_LABEL[id as SourceId];
+  }
   const byId = React.useMemo(() => {
     const map = new Map<SourceId, SourceSummary>();
     for (const item of sources) map.set(item.id, item);
@@ -37,7 +38,7 @@ function SourceTabs({ value, onChange, sources, totalCount, className }: SourceT
   return (
     <div
       role="tablist"
-      aria-label="Chat history source"
+      aria-label={t("sourceTabs.chatHistorySource")}
       className={cn(
         "flex items-center gap-0.5 rounded-md bg-foreground/[0.06] p-0.5",
         className

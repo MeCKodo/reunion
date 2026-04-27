@@ -8,7 +8,11 @@ import { SessionListItem } from "./SessionListItem";
 interface SessionGroupProps {
   group: RepoGroup;
   collapsed: boolean;
-  onToggle: () => void;
+  /**
+   * Stable callback shared across all groups. The group derives its own key
+   * (`source:repo`) so we don't need an inline closure per row.
+   */
+  onToggle: (groupKey: string) => void;
   activeSessionKey: string;
   hasQuery: boolean;
   onOpenSession: (sessionKey: string) => void;
@@ -27,11 +31,15 @@ function SessionGroup({
   onJumpToHit,
 }: SessionGroupProps) {
   const repoLabel = prettifyRepoName(group.repo);
+  const groupKey = `${group.source}:${group.repo}`;
+  const handleToggle = React.useCallback(() => {
+    onToggle(groupKey);
+  }, [onToggle, groupKey]);
   return (
     <div>
       <button
         type="button"
-        onClick={onToggle}
+        onClick={handleToggle}
         className={cn(
           "w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors",
           "hover:bg-surface focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
@@ -59,11 +67,9 @@ function SessionGroup({
               item={item}
               selected={item.session_key === activeSessionKey}
               hasQuery={hasQuery}
-              onOpen={() => onOpenSession(item.session_key)}
-              onToggleStar={() => onToggleStar(item.session_key)}
-              onJumpToHit={(segmentIndex, hitIndex) =>
-                onJumpToHit(item.session_key, segmentIndex, hitIndex)
-              }
+              onOpen={onOpenSession}
+              onToggleStar={onToggleStar}
+              onJumpToHit={onJumpToHit}
             />
           ))}
         </div>
@@ -72,4 +78,21 @@ function SessionGroup({
   );
 }
 
-export { SessionGroup };
+// Memoized so the sidebar's keystroke-driven re-renders stop cascading into
+// every group header. The groupedResults array is rebuilt on every keystroke
+// (new RepoGroup objects), so when the same query is in flight the list
+// stays referentially equal anyway. We compare by reference plus the few
+// scalar props to keep this tight.
+const SessionGroupMemo = React.memo(SessionGroup, (prev, next) => {
+  if (prev.group !== next.group) return false;
+  if (prev.collapsed !== next.collapsed) return false;
+  if (prev.activeSessionKey !== next.activeSessionKey) return false;
+  if (prev.hasQuery !== next.hasQuery) return false;
+  if (prev.onToggle !== next.onToggle) return false;
+  if (prev.onOpenSession !== next.onOpenSession) return false;
+  if (prev.onToggleStar !== next.onToggleStar) return false;
+  if (prev.onJumpToHit !== next.onJumpToHit) return false;
+  return true;
+});
+
+export { SessionGroupMemo as SessionGroup };

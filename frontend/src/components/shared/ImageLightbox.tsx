@@ -1,5 +1,6 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Copy, Download, X } from "lucide-react";
 import { assetUrl, basenameOf } from "@/lib/asset";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ interface ImageLightboxProps {
 }
 
 function ImageLightbox({ paths, initialIndex = 0, open, onClose }: ImageLightboxProps) {
+  const { t } = useTranslation();
   const [index, setIndex] = React.useState(initialIndex);
 
   React.useEffect(() => {
@@ -87,27 +89,27 @@ function ImageLightbox({ paths, initialIndex = 0, open, onClose }: ImageLightbox
             type="button"
             onClick={onCopyPath}
             className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] text-white/80 transition-colors hover:bg-white/10"
-            title="Copy path"
+            title={t("image.copyPath")}
           >
             <Copy className="h-3.5 w-3.5" />
-            Copy path
+            {t("image.copyPath")}
           </button>
           <a
             href={assetUrl(current)}
             download={basenameOf(current)}
             className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] text-white/80 transition-colors hover:bg-white/10"
-            title="Download"
+            title={t("image.download")}
             onClick={(event) => event.stopPropagation()}
           >
             <Download className="h-3.5 w-3.5" />
-            Download
+            {t("image.download")}
           </a>
           <button
             type="button"
             onClick={onClose}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/80 transition-colors hover:bg-white/10"
-            title="Close (Esc)"
-            aria-label="Close"
+            title={t("image.closeEsc")}
+            aria-label={t("common.close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -126,7 +128,7 @@ function ImageLightbox({ paths, initialIndex = 0, open, onClose }: ImageLightbox
               "absolute left-2 top-1/2 -translate-y-1/2 inline-flex h-10 w-10 items-center justify-center rounded-full",
               "bg-white/10 text-white/90 transition-colors hover:bg-white/20"
             )}
-            aria-label="Previous"
+            aria-label={t("image.previous")}
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -148,7 +150,7 @@ function ImageLightbox({ paths, initialIndex = 0, open, onClose }: ImageLightbox
               "absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-10 w-10 items-center justify-center rounded-full",
               "bg-white/10 text-white/90 transition-colors hover:bg-white/20"
             )}
-            aria-label="Next"
+            aria-label={t("image.next")}
           >
             <ChevronRight className="h-5 w-5" />
           </button>

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, Tag, X } from "lucide-react";
 
 interface SessionTagEditorProps {
@@ -16,6 +17,7 @@ function SessionTagEditor({
   onAddTag,
   onRemoveTag,
 }: SessionTagEditorProps) {
+  const { t } = useTranslation();
   const [editing, setEditing] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -41,11 +43,11 @@ function SessionTagEditor({
       <button
         type="button"
         onClick={startEditing}
-        title="Add tag to organize this session"
+        title={t("tags.addTag")}
         className="inline-flex items-center gap-1 rounded-md border border-dashed border-border-strong/80 px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-accent/50 hover:bg-accent-soft/40 hover:text-accent"
       >
         <Tag className="h-3 w-3" />
-        Add tag
+        {t("tags.addTag")}
       </button>
     );
   }
@@ -62,7 +64,7 @@ function SessionTagEditor({
             type="button"
             onClick={() => onRemoveTag(tag)}
             className="rounded-full p-0.5 text-accent/40 transition-colors hover:bg-accent/10 hover:text-destructive"
-            title="Remove tag"
+            title={t("tags.removeTag")}
           >
             <X className="h-3 w-3" />
           </button>
@@ -92,7 +94,7 @@ function SessionTagEditor({
               commitTag();
               setEditing(false);
             }}
-            placeholder="type then Enter"
+            placeholder={t("tags.placeholder")}
             className="h-5 w-28 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
           />
         </span>
@@ -101,7 +103,7 @@ function SessionTagEditor({
           type="button"
           onClick={startEditing}
           className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-border-strong/80 text-muted-foreground transition-colors hover:border-accent/50 hover:bg-accent-soft/40 hover:text-accent"
-          title="Add another tag"
+          title={t("tags.addAnother")}
         >
           <Plus className="h-3.5 w-3.5" />
         </button>

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Clock3, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -23,14 +24,19 @@ interface SessionListItemProps {
   item: SearchResult;
   selected: boolean;
   hasQuery: boolean;
-  onOpen: () => void;
-  onToggleStar: () => void;
-  onJumpToHit: (segmentIndex: number, hitIndex: number) => void;
+  /**
+   * Stable, group-level callbacks. The row passes its own session_key /
+   * (segment, hit) coordinates so the parent doesn't need an inline closure
+   * per row, which would otherwise defeat React.memo on a 300+ row list.
+   */
+  onOpen: (sessionKey: string) => void;
+  onToggleStar: (sessionKey: string) => void;
+  onJumpToHit: (sessionKey: string, segmentIndex: number, hitIndex: number) => void;
 }
 
 const MAX_VISIBLE_TAGS = 2;
 
-function SessionListItem({
+function SessionListItemImpl({
   item,
   selected,
   hasQuery,
@@ -38,6 +44,19 @@ function SessionListItem({
   onToggleStar,
   onJumpToHit,
 }: SessionListItemProps) {
+  const handleOpen = React.useCallback(() => {
+    onOpen(item.session_key);
+  }, [onOpen, item.session_key]);
+  const handleToggleStar = React.useCallback(() => {
+    onToggleStar(item.session_key);
+  }, [onToggleStar, item.session_key]);
+  const handleJumpToHit = React.useCallback(
+    (segmentIndex: number, hitIndex: number) => {
+      onJumpToHit(item.session_key, segmentIndex, hitIndex);
+    },
+    [onJumpToHit, item.session_key]
+  );
+  const { t } = useTranslation();
   const title = decodeEntities(item.title || stripHtml(item.snippet) || item.session_id);
   const tags = item.tags ?? [];
   const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
@@ -47,11 +66,11 @@ function SessionListItem({
     <div
       role="button"
       tabIndex={0}
-      onClick={onOpen}
+      onClick={handleOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onOpen();
+          handleOpen();
         }
       }}
       className={cn(
@@ -66,9 +85,9 @@ function SessionListItem({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            onToggleStar();
+            handleToggleStar();
           }}
-          title={item.starred ? "Unstar" : "Star"}
+          title={item.starred ? t("session.unstar") : t("session.star")}
           className={cn(
             "mt-[2px] inline-flex h-4 w-4 shrink-0 items-center justify-center transition-colors",
             item.starred
@@ -130,14 +149,14 @@ function SessionListItem({
       {hasQuery ? (
         <div className="mt-2 space-y-1.5 pl-6">
           <div className="font-mono text-[10px] uppercase tracking-overline text-accent">
-            {item.match_count || 0} {(item.match_count || 0) === 1 ? "hit" : "hits"}
+            {t("sidebar.hitCount", { count: item.match_count || 0 })}
           </div>
           {item.message_hits.slice(0, 2).map((hit, hitIndex) => (
             <button
               key={`${item.session_key}-${hit.segment_index}-${hitIndex}`}
               onClick={(event) => {
                 event.stopPropagation();
-                onJumpToHit(hit.segment_index, hitIndex);
+                handleJumpToHit(hit.segment_index, hitIndex);
               }}
               className="block w-full border-l border-border bg-surface/70 px-2 py-1.5 text-left transition-colors hover:border-border-strong hover:bg-surface"
             >
@@ -157,5 +176,19 @@ function SessionListItem({
     </div>
   );
 }
+
+// Memoized so a sidebar of 300+ rows only re-renders the items whose `item`
+// reference, `selected` flag or `hasQuery` actually changes. The item object
+// reference is preserved by the backend response → React state path, so this
+// effectively pins each row across keystrokes that don't touch its data.
+const SessionListItem = React.memo(SessionListItemImpl, (prev, next) => {
+  if (prev.item !== next.item) return false;
+  if (prev.selected !== next.selected) return false;
+  if (prev.hasQuery !== next.hasQuery) return false;
+  if (prev.onOpen !== next.onOpen) return false;
+  if (prev.onToggleStar !== next.onToggleStar) return false;
+  if (prev.onJumpToHit !== next.onJumpToHit) return false;
+  return true;
+});
 
 export { SessionListItem };

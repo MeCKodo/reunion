@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Bot } from "lucide-react";
 import { formatDuration, formatTs } from "@/lib/format";
 import type {
@@ -34,8 +35,15 @@ function SubagentBlock({
   registerRef,
   source,
 }: SubagentBlockProps) {
+  const { t } = useTranslation();
   const events = subagent.displayEvents ?? subagent.filteredEvents;
   const pairedResults = subagent.pairedResults;
+  const hitEventIds = React.useMemo(
+    () => new Set(detailMessageHits.map((hit) => hit.event_id)),
+    [detailMessageHits]
+  );
+  const activeHitEventId =
+    detailMessageHits[activeMatch]?.event_id ?? null;
   return (
     <div className="rounded-md border border-sky-200 border-l-[3px] border-l-sky-500 bg-surface overflow-hidden">
       <div className="bg-sky-50/60 border-b border-sky-100 px-4 py-3">
@@ -47,7 +55,7 @@ function SubagentBlock({
             <Bot className="h-3.5 w-3.5" />
           </div>
           <span className="rounded-sm bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700">
-            Subagent
+            {t("session.subagentLabel")}
           </span>
           <span className="font-sans text-[14px] font-semibold text-foreground">
             {subagent.title || subagent.session_id}
@@ -65,10 +73,8 @@ function SubagentBlock({
       </div>
       <div className="p-4 space-y-4">
         {events.map((event) => {
-          const isMatch = detailMessageHits.some((hit) => hit.event_id === event.event_id);
-          const isActiveMatch =
-            detailMessageHits[activeMatch] &&
-            detailMessageHits[activeMatch].event_id === event.event_id;
+          const isMatch = hitEventIds.has(event.event_id);
+          const isActiveMatch = activeHitEventId === event.event_id;
           const pairedResult =
             event.kind === "tool_use" && event.tool_call_id
               ? pairedResults?.get(event.tool_call_id)
@@ -79,9 +85,9 @@ function SubagentBlock({
               event={event}
               queryTokens={queryTokens}
               isMatch={isMatch}
-              isActiveMatch={Boolean(isActiveMatch)}
+              isActiveMatch={isActiveMatch}
               pulseKey={pulseKey}
-              registerRef={(node) => registerRef(event.event_id, node)}
+              registerRef={registerRef}
               source={source}
               pairedResult={pairedResult}
             />

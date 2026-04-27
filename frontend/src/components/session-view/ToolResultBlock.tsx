@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { renderHighlightedBlock } from "@/lib/text";
@@ -48,6 +49,7 @@ interface ToolResultBlockProps {
 }
 
 function ToolResultBlock({ result, queryTokens = [] }: ToolResultBlockProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = React.useState(false);
   const [showFull, setShowFull] = React.useState(false);
 
@@ -64,13 +66,11 @@ function ToolResultBlock({ result, queryTokens = [] }: ToolResultBlockProps) {
   const visibleText = showFull ? text : preview;
   const useMarkdown = expanded && looksLikeMarkdown(visibleText);
 
-  const summary = isError
-    ? "tool_result · error"
-    : "tool_result";
+  const summary = isError ? t("tool.toolResultError") : t("tool.toolResult");
 
   const sizeLabel = lineCount
-    ? `${lineCount} line${lineCount === 1 ? "" : "s"} · ${byteCount} chars`
-    : `${byteCount} chars`;
+    ? t("tool.lineCount", { count: lineCount, chars: byteCount })
+    : t("tool.charCount", { count: byteCount });
 
   return (
     <div
@@ -132,7 +132,7 @@ function ToolResultBlock({ result, queryTokens = [] }: ToolResultBlockProps) {
                     : "border-border/70 bg-background-soft text-muted-foreground hover:text-foreground"
                 )}
               >
-                {showFull ? "Show preview" : `Show full (${lineCount} lines)`}
+                {showFull ? t("tool.showPreview") : t("tool.showFull", { count: lineCount })}
               </button>
             </div>
           ) : null}

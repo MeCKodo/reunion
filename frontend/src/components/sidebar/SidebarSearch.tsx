@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Filter, Loader2, Search, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -45,8 +46,12 @@ function SidebarSearch({
   tagPickerOpen,
   setTagPickerOpen,
 }: SidebarSearchProps) {
+  const { t } = useTranslation();
   const hasAdvancedFilter = selectedRepo !== "all" || days !== "30";
-  const daysLabel = DAY_OPTIONS.find((d) => d.value === days)?.label ?? days;
+  const daysLabel = (() => {
+    const opt = DAY_OPTIONS.find((d) => d.value === days);
+    return opt ? t(opt.labelKey) : days;
+  })();
 
   return (
     <div className="space-y-2.5">
@@ -64,7 +69,7 @@ function SidebarSearch({
             <kbd className="pointer-events-none font-mono text-[10px] text-muted-foreground/60">⌘K</kbd>
           )
         }
-        placeholder="Search all repos"
+        placeholder={t("sidebar.searchPlaceholder")}
         className="h-9"
       />
 
@@ -78,7 +83,7 @@ function SidebarSearch({
             setDays("30");
           }}
         >
-          全部
+          {t("sidebar.all")}
         </ChipButton>
 
         <ChipButton
@@ -86,7 +91,7 @@ function SidebarSearch({
           onClick={() => setOnlyStarred((v) => !v)}
           icon={<Star className={cn("h-3 w-3", onlyStarred && "fill-current")} />}
         >
-          Starred
+          {t("sidebar.starred")}
         </ChipButton>
 
         <TagFilterPopover
@@ -109,7 +114,7 @@ function SidebarSearch({
                     selectedRepo !== "all" && prettifyRepoName(selectedRepo),
                     days !== "30" && daysLabel,
                   ].filter(Boolean).join(" · ")
-                : "筛选"}
+                : t("sidebar.filter")}
             </ChipButton>
           </PopoverTrigger>
 
@@ -117,7 +122,7 @@ function SidebarSearch({
             <div className="px-2.5 pt-2.5 pb-1.5">
               <div className="flex items-center justify-between mb-1">
                 <span className="inline-flex items-baseline gap-1.5 font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-                  Project
+                  {t("sidebar.project")}
                   <span className="font-mono text-[10px] tabular-nums normal-case tracking-normal text-muted-foreground/60">
                     {repoOptions.length}
                   </span>
@@ -127,7 +132,7 @@ function SidebarSearch({
                     className="text-[10px] text-accent hover:underline"
                     onClick={() => setSelectedRepo("all")}
                   >
-                    reset
+                    {t("common.reset")}
                   </button>
                 )}
               </div>
@@ -140,7 +145,7 @@ function SidebarSearch({
                   active={selectedRepo === "all"}
                   onClick={() => setSelectedRepo("all")}
                 >
-                  All projects
+                  {t("sidebar.allProjects")}
                 </FilterOption>
                 {repoOptions.map((repo) => (
                   <FilterOption
@@ -156,7 +161,7 @@ function SidebarSearch({
 
             <div className="border-t border-border px-2.5 pt-1.5 pb-2.5">
               <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-                Time range
+                {t("sidebar.timeRange")}
               </span>
               {/* Segmented control: equal-width 3×2 grid. Each option is a
                   real chip with its own visible background so users can see
@@ -181,7 +186,7 @@ function SidebarSearch({
                           : "border-border bg-surface text-muted-foreground hover:border-border-strong hover:bg-background-soft hover:text-foreground"
                       )}
                     >
-                      {item.label}
+                      {t(item.labelKey)}
                     </button>
                   );
                 })}

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ImageOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { assetUrl, basenameOf } from "@/lib/asset";
@@ -35,8 +36,8 @@ function resolvePathForLightbox(source: ImageThumbSource): string {
   return source.kind === "path" ? source.path : source.url;
 }
 
-function resolveLabel(source: ImageThumbSource): string {
-  if (source.kind === "data") return source.label ?? "image";
+function resolveLabel(source: ImageThumbSource, t: (key: string) => string): string {
+  if (source.kind === "data") return source.label ?? t("image.image");
   return basenameOf(source.path);
 }
 
@@ -77,22 +78,23 @@ function FallbackTile({
   source: ImageThumbSource;
   large: boolean;
 }) {
+  const { t } = useTranslation();
   const reason = describeFallback(source);
-  const label = resolveLabel(source);
+  const label = resolveLabel(source, t);
   const fullPath = source.kind === "path" ? source.path : undefined;
 
   const headline =
     reason.kind === "temp-cleared"
-      ? "图片已被系统清理"
+      ? t("image.tempCleared")
       : reason.kind === "path-missing"
-      ? "图片不可用"
-      : "图片加载失败";
+      ? t("image.unavailable")
+      : t("image.loadFailed");
   const detail =
     reason.kind === "temp-cleared"
-      ? "原始剪贴板/临时文件在会话之后已被自动删除"
+      ? t("image.tempClearedDetail")
       : reason.kind === "path-missing"
-      ? "找不到原文件，可能已被移动或不在允许的目录中"
-      : "无法解码内嵌图片数据";
+      ? t("image.unavailableDetail")
+      : t("image.dataLoadFailed");
 
   if (!large) {
     return (
@@ -141,9 +143,10 @@ function FallbackTile({
  * raw label.
  */
 function ImageThumb({ source, variant = "single", className }: ImageThumbProps) {
+  const { t } = useTranslation();
   const [errored, setErrored] = React.useState(false);
   const [open, setOpen] = React.useState(false);
-  const label = resolveLabel(source);
+  const label = resolveLabel(source, t);
   const lightboxPath = resolvePathForLightbox(source);
   const src = assetUrl(lightboxPath);
   const large = variant === "single";

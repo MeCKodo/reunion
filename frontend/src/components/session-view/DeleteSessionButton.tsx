@@ -2,6 +2,7 @@ import * as React from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 interface DeleteSessionButtonProps {
@@ -16,6 +17,7 @@ interface DeleteSessionButtonProps {
 }
 
 function DeleteSessionButton({ title, onConfirm, disabled }: DeleteSessionButtonProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
@@ -46,7 +48,7 @@ function DeleteSessionButton({ title, onConfirm, disabled }: DeleteSessionButton
           size="sm"
           variant="outline"
           disabled={disabled}
-          title="Delete this session (and its transcript file)"
+          title={t("delete.deleteTooltip")}
           className={cn(
             "shrink-0 text-muted-foreground",
             "hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive",
@@ -54,7 +56,7 @@ function DeleteSessionButton({ title, onConfirm, disabled }: DeleteSessionButton
           )}
         >
           <Trash2 className="h-3.5 w-3.5" />
-          <span className="hidden md:inline">Delete</span>
+          <span className="hidden md:inline">{t("delete.deleteButton")}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -65,10 +67,8 @@ function DeleteSessionButton({ title, onConfirm, disabled }: DeleteSessionButton
       >
         <div className="space-y-3">
           <div className="space-y-1">
-            <div className="font-semibold text-foreground">删除此会话？</div>
-            <div className="text-muted-foreground leading-snug">
-              将永久删除磁盘上的 transcript 文件（含关联子代理与本地标注），此操作不可撤销。
-            </div>
+            <div className="font-semibold text-foreground">{t("delete.confirmTitle")}</div>
+            <div className="text-muted-foreground leading-snug">{t("delete.confirmBody")}</div>
             <div
               className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80"
               title={title}
@@ -83,7 +83,7 @@ function DeleteSessionButton({ title, onConfirm, disabled }: DeleteSessionButton
               onClick={() => setOpen(false)}
               disabled={busy}
             >
-              取消
+              {t("delete.confirmCancel")}
             </Button>
             <Button
               size="sm"
@@ -96,7 +96,7 @@ function DeleteSessionButton({ title, onConfirm, disabled }: DeleteSessionButton
               ) : (
                 <Trash2 className="h-3.5 w-3.5" />
               )}
-              <span>{busy ? "删除中…" : "永久删除"}</span>
+              <span>{busy ? t("delete.deleting") : t("delete.permanentDelete")}</span>
             </Button>
           </div>
         </div>

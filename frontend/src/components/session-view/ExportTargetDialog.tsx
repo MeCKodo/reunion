@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { TFunction } from "i18next";
 import {
   AlertTriangle,
   Check,
@@ -17,22 +18,18 @@ import { cn } from "@/lib/utils";
 import {
   fetchExportTarget,
   fetchFsList,
-  postExportWrite,
   type ExportKind,
   type ExportTarget,
   type FsListResponse,
 } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import { useTaskCenter } from "@/lib/task-center";
 
 interface ExportTargetDialogProps {
   open: boolean;
   onClose: () => void;
   sessionKey: string;
   kind: ExportKind;
-  /** Called once a write succeeds with the absolute path that was written. */
-  onWritten: (info: { absolutePath: string; relativePath: string; mode: string }) => void;
-  /** Called when the user confirms the dialog but we should fall back to a
-   *  download instead (e.g. they explicitly asked to download). */
-  onFallbackDownload?: () => void;
 }
 
 type WriteState = "idle" | "writing" | "confirm-overwrite";
@@ -42,8 +39,8 @@ export function ExportTargetDialog({
   onClose,
   sessionKey,
   kind,
-  onWritten,
 }: ExportTargetDialogProps) {
+  const { t } = useTranslation();
   const [target, setTarget] = React.useState<ExportTarget | null>(null);
   const [loadingTarget, setLoadingTarget] = React.useState(false);
   const [picker, setPicker] = React.useState<{
@@ -74,7 +71,7 @@ export function ExportTargetDialog({
         setRelPath(data.relativePath);
       } catch (error) {
         if (!cancelled) {
-          setWriteError(`Could not preview target: ${String(error)}`);
+          setWriteError(t("export.couldNotPreview", { error: String(error) }));
         }
       } finally {
         if (!cancelled) setLoadingTarget(false);
@@ -83,7 +80,7 @@ export function ExportTargetDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, sessionKey, kind]);
+  }, [open, sessionKey, kind, t]);
 
   const refreshTarget = React.useCallback(
     async (overridePath?: string) => {
@@ -98,12 +95,12 @@ export function ExportTargetDialog({
         );
         setWriteError(null);
       } catch (error) {
-        setWriteError(`Could not preview target: ${String(error)}`);
+        setWriteError(t("export.couldNotPreview", { error: String(error) }));
       } finally {
         setLoadingTarget(false);
       }
     },
-    [sessionKey, kind, target?.relativePath]
+    [sessionKey, kind, target?.relativePath, t]
   );
 
   const openPicker = React.useCallback(
@@ -154,13 +151,15 @@ export function ExportTargetDialog({
     [refreshTarget]
   );
 
+  const { submitTask } = useTaskCenter();
+
   const performWrite = React.useCallback(
     async (overwrite: boolean) => {
       if (!target?.repo.path) return;
       setWriteState("writing");
       setWriteError(null);
       try {
-        const result = await postExportWrite({
+        await submitTask({
           sessionKey,
           kind,
           targetDir: target.repo.path,
@@ -168,46 +167,38 @@ export function ExportTargetDialog({
           overwrite,
           rememberMapping: true,
         });
-        onWritten({
-          absolutePath: result.absolutePath,
-          relativePath: result.relativePath,
-          mode: result.mode,
-        });
+        // Task submitted — close the dialog immediately.
+        // The TaskCenter will handle progress & completion.
+        onClose();
       } catch (error) {
         const err = error as Error & { code?: string };
         if (err.code === "EEXIST") {
           setWriteState("confirm-overwrite");
-          setWriteError("A file with this name already exists at the target path.");
+          setWriteError(t("export.fileExistsError"));
           return;
         }
         setWriteState("idle");
         setWriteError(String(error));
       }
     },
-    [target?.repo.path, sessionKey, kind, relPath, onWritten]
+    [target?.repo.path, sessionKey, kind, relPath, submitTask, onClose, t]
   );
 
   const repoPath = target?.repo.path || null;
-  const repoSourceLabel = repoSourceText(target?.repo.source);
+  const repoSourceLabel = repoSourceText(target?.repo.source, t);
   const writeBusy = writeState === "writing";
 
   return (
     <Modal
       open={open}
       onClose={writeBusy ? () => undefined : onClose}
-      title={kind === "skill" ? "Write Smart Skill to repo" : "Write Smart Rule to repo"}
-      description={
-        <>
-          We&apos;ll generate the markdown via your default AI provider and drop it
-          straight into the project repository. Edit the destination below if our guess
-          isn&apos;t quite right.
-        </>
-      }
+      title={kind === "skill" ? t("export.writeSkillToRepo") : t("export.writeRuleToRepo")}
+      description={t("export.writeDescription")}
       sizeClassName="max-w-2xl"
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="ghost" onClick={onClose} disabled={writeBusy}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           {writeState === "confirm-overwrite" ? (
             <Button
@@ -215,7 +206,7 @@ export function ExportTargetDialog({
               onClick={() => performWrite(true)}
               disabled={writeBusy}
             >
-              Overwrite anyway
+              {t("export.overwriteAnyway")}
             </Button>
           ) : (
             <Button
@@ -225,12 +216,12 @@ export function ExportTargetDialog({
               {writeBusy ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating…
+                  {t("export.generating")}
                 </>
               ) : (
                 <>
                   <FolderOpen className="h-4 w-4" />
-                  Generate &amp; write
+                  {t("export.generateAndWrite")}
                 </>
               )}
             </Button>
@@ -241,13 +232,13 @@ export function ExportTargetDialog({
       <div className="space-y-4 text-sm">
         <section>
           <h3 className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-            Repository
+            {t("export.repository")}
           </h3>
           <div className="mt-2 rounded-md border border-border bg-background-soft px-3 py-2.5">
             {loadingTarget ? (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Looking up the project repo for this session…
+                {t("export.lookingUp")}
               </div>
             ) : repoPath ? (
               <div className="flex items-start gap-2">
@@ -263,7 +254,7 @@ export function ExportTargetDialog({
                   <div className="mt-0.5 text-[11.5px] text-muted-foreground">
                     {repoSourceLabel}
                     {!target?.repo.isGitRepo
-                      ? " · not a git repo (you can still write here)"
+                      ? " · " + t("export.notGitRepo")
                       : ""}
                   </div>
                 </div>
@@ -273,20 +264,17 @@ export function ExportTargetDialog({
                   onClick={() => openPicker()}
                   disabled={writeBusy}
                 >
-                  Change…
+                  {t("export.change")}
                 </Button>
               </div>
             ) : (
               <div className="flex items-center justify-between gap-2 text-muted-foreground">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                  <span>
-                    Couldn&apos;t auto-detect this session&apos;s repo. Pick a folder
-                    manually.
-                  </span>
+                  <span>{t("export.cantAutoDetect")}</span>
                 </div>
                 <Button size="sm" variant="default" onClick={() => openPicker()}>
-                  Pick a folder…
+                  {t("export.pickFolder")}
                 </Button>
               </div>
             )}
@@ -295,7 +283,7 @@ export function ExportTargetDialog({
 
         <section>
           <label className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-            File path inside repo
+            {t("export.filePathInRepo")}
           </label>
           <Input
             value={relPath}
@@ -312,7 +300,7 @@ export function ExportTargetDialog({
           {target?.fileExists && writeState !== "confirm-overwrite" ? (
             <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-amber-600 dark:text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5" />
-              File already exists. We&apos;ll ask before overwriting.
+              {t("export.fileAlreadyExists")}
             </div>
           ) : null}
         </section>
@@ -341,16 +329,19 @@ export function ExportTargetDialog({
   );
 }
 
-function repoSourceText(source: ExportTarget["repo"]["source"] | undefined): string {
+function repoSourceText(
+  source: ExportTarget["repo"]["source"] | undefined,
+  t: TFunction
+): string {
   switch (source) {
     case "mapping":
-      return "Remembered from a previous export";
+      return t("export.repoSourceMapping");
     case "session":
-      return "Inferred from the session's working directory";
+      return t("export.repoSourceSession");
     case "decoded":
-      return "Decoded from the Cursor project name";
+      return t("export.repoSourceDecoded");
     case "none":
-      return "No reliable hint — pick manually";
+      return t("export.repoSourceNone");
     default:
       return "";
   }
@@ -382,6 +373,7 @@ interface FsBrowserOverlayProps {
 }
 
 function FsBrowserOverlay({ state, onClose, onNavigate, onChoose }: FsBrowserOverlayProps) {
+  const { t } = useTranslation();
   if (!state.open) return null;
   const { listing, cwd } = state;
   return (
@@ -394,7 +386,7 @@ function FsBrowserOverlay({ state, onClose, onNavigate, onChoose }: FsBrowserOve
           disabled={state.loading}
           aria-label="Close folder picker"
         >
-          ← Back
+          {t("export.backButton")}
         </Button>
         <div className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground">
           {cwd || "—"}
@@ -407,7 +399,7 @@ function FsBrowserOverlay({ state, onClose, onNavigate, onChoose }: FsBrowserOve
             disabled={state.loading}
           >
             <ChevronUp className="h-3.5 w-3.5" />
-            Up
+            {t("export.up")}
           </Button>
         ) : null}
         <Button
@@ -417,21 +409,21 @@ function FsBrowserOverlay({ state, onClose, onNavigate, onChoose }: FsBrowserOve
           disabled={state.loading || !cwd}
         >
           <Check className="h-3.5 w-3.5" />
-          Use this folder
+          {t("export.useThisFolder")}
         </Button>
       </header>
 
       {listing && listing.bookmarks?.workspaces?.length ? (
         <div className="flex flex-wrap gap-1.5 border-b border-border bg-background-soft px-4 py-2">
           <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-            Quick:
+            {t("export.quick")}
           </span>
           <button
             type="button"
             onClick={() => onNavigate(listing.bookmarks.home)}
             className="rounded border border-border-strong px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground hover:bg-background hover:text-foreground"
           >
-            ~ home
+            {t("export.home")}
           </button>
           {listing.bookmarks.workspaces.map((wp) => (
             <button
@@ -450,13 +442,13 @@ function FsBrowserOverlay({ state, onClose, onNavigate, onChoose }: FsBrowserOve
         {state.loading ? (
           <div className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading…
+            {t("export.loading")}
           </div>
         ) : state.error ? (
           <div className="px-3 py-2 text-[12.5px] text-destructive">{state.error}</div>
         ) : listing && listing.entries.length === 0 ? (
           <div className="px-3 py-3 text-[12.5px] text-muted-foreground">
-            No subfolders. Click &quot;Use this folder&quot; to pick {cwd}.
+            {t("export.noSubfolders", { path: cwd })}
           </div>
         ) : (
           <ul className="flex flex-col">
@@ -490,16 +482,16 @@ function FsBrowserOverlay({ state, onClose, onNavigate, onChoose }: FsBrowserOve
       </div>
 
       <footer className="flex items-center justify-between gap-2 border-t border-border bg-background-soft px-4 py-2 text-[11.5px] text-muted-foreground">
-        <span>Hidden folders are filtered out for clarity.</span>
+        <span>{t("export.hiddenFolders")}</span>
         {listing ? (
           <button
             type="button"
             onClick={() => onNavigate(listing.path)}
             className="inline-flex items-center gap-1 hover:text-foreground"
-            aria-label="Refresh"
+            aria-label={t("common.refresh")}
           >
             <RefreshCw className="h-3 w-3" />
-            Refresh
+            {t("common.refresh")}
           </button>
         ) : null}
       </footer>

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bell,
   ChevronRight,
@@ -18,6 +19,7 @@ import {
   extractImagePaths,
   extractInlineImageRefs,
 } from "@/lib/asset";
+import i18n from "@/i18n";
 
 /**
  * Cursor / Claude inject several XML-shaped wrappers into the *first*
@@ -45,18 +47,23 @@ const INJECTION_TAGS = new Set([
 
 const STRIP_WRAPPERS = new Set(["user_query"]);
 
-const TAG_LABEL: Record<string, string> = {
-  manually_attached_skills: "Manually attached skills",
-  system_reminder: "System reminder",
-  "system-reminder": "System reminder",
-  attached_files: "Attached files",
-  image_files: "Image files",
-  available_skills: "Available skills",
-  available_tools: "Available tools",
-  previous_conversation_summary: "Previous conversation summary",
-  context_files: "Context files",
-  open_and_recently_viewed_files: "Open / recent files",
+const TAG_LABEL_KEYS: Record<string, string> = {
+  manually_attached_skills: "user.manuallyAttachedSkills",
+  system_reminder: "user.systemReminder",
+  "system-reminder": "user.systemReminder",
+  attached_files: "user.attachedFiles",
+  image_files: "user.imageFiles",
+  available_skills: "user.availableSkills",
+  available_tools: "user.availableTools",
+  previous_conversation_summary: "user.previousConversationSummary",
+  context_files: "user.contextFiles",
+  open_and_recently_viewed_files: "user.openRecentFiles",
 };
+
+function getTagLabel(tag: string): string {
+  const key = TAG_LABEL_KEYS[tag];
+  return key ? i18n.t(key) : tag;
+}
 
 const TAG_ICON: Record<string, LucideIcon> = {
   manually_attached_skills: Sparkles,
@@ -110,22 +117,26 @@ function summarize(tag: string, content: string): string {
         ? `${names.slice(0, 3).join(", ")} +${names.length - 3}`
         : names.join(", ");
     }
-    return "skill instructions";
+    return i18n.t("user.skillInstructions");
   }
   if (tag === "image_files") {
     const n = countImagePaths(content);
-    return n ? `${n} 张图片` : "图片附件";
+    return n ? i18n.t("user.imageCount", { count: n }) : i18n.t("user.imageAttachment");
   }
   if (tag === "attached_files" || tag === "context_files") {
     const lines = content
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
-    return lines.length ? `${lines.length} 个文件` : "文件";
+    return lines.length
+      ? i18n.t("user.fileCount", { count: lines.length })
+      : i18n.t("user.file");
   }
   if (tag === "previous_conversation_summary") {
     const chars = content.trim().length;
-    return chars ? `${chars.toLocaleString()} chars` : "summary";
+    return chars
+      ? i18n.t("user.chars", { count: chars.toLocaleString() })
+      : i18n.t("user.summary");
   }
   return "";
 }
@@ -207,7 +218,7 @@ interface PlainChipProps {
 function PlainInjectionChip({ segment, matchesQuery }: PlainChipProps) {
   const [open, setOpen] = React.useState(false);
   const Icon = TAG_ICON[segment.tag] ?? Wrench;
-  const label = TAG_LABEL[segment.tag] ?? segment.tag;
+  const label = getTagLabel(segment.tag);
 
   return (
     <div className="my-1.5 space-y-2">
@@ -257,6 +268,7 @@ interface ImageAttachmentCardProps {
 }
 
 function ImageAttachmentCard({ raw, matchesQuery }: ImageAttachmentCardProps) {
+  const { t } = useTranslation();
   const paths = React.useMemo(() => extractImagePaths(raw), [raw]);
   const [showRaw, setShowRaw] = React.useState(false);
   const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
@@ -270,7 +282,7 @@ function ImageAttachmentCard({ raw, matchesQuery }: ImageAttachmentCardProps) {
           kind: "injection",
           tag: "image_files",
           raw,
-          summary: "图片附件",
+          summary: t("user.imageAttachment"),
         }}
         matchesQuery={matchesQuery}
       />
@@ -290,7 +302,7 @@ function ImageAttachmentCard({ raw, matchesQuery }: ImageAttachmentCardProps) {
       <div className="flex items-center gap-1.5 border-b border-border/40 bg-background/40 px-2.5 py-1.5 text-[10.5px] text-muted-foreground">
         <ImageIcon className="h-3 w-3 shrink-0" strokeWidth={2} />
         <span className="font-sans font-medium tracking-tight text-foreground/75">
-          Image files
+          {t("user.imageFiles")}
         </span>
         <span className="opacity-40">·</span>
         <span className="tabular-nums">{paths.length}</span>
@@ -507,7 +519,8 @@ interface UserMessageBodyProps {
 }
 
 function UserMessageBody({ text, queryTokens = [] }: UserMessageBodyProps) {
-  const segments = React.useMemo(() => parseUserMessage(text), [text]);
+  const { i18n } = useTranslation();
+  const segments = React.useMemo(() => parseUserMessage(text), [text, i18n.language]);
 
   const hasInjection = segments.some((s) => s.kind === "injection");
   if (

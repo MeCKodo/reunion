@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Copy, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useElectronDrag } from "@/hooks/useElectronDrag";
@@ -44,6 +45,7 @@ function SessionHeader({
   onAddTag,
   onRemoveTag,
 }: SessionHeaderProps) {
+  const { t } = useTranslation();
   const repoLabel = prettifyRepoName(detail.repo);
   const fullTitle = decodeEntities(detail.title || detail.session_id);
 
@@ -78,7 +80,7 @@ function SessionHeader({
         <button
           type="button"
           onClick={onToggleStar}
-          title={detail.starred ? "Unstar" : "Star"}
+          title={detail.starred ? t("session.unstar") : t("session.star")}
           style={noDragStyle}
           className={cn(
             "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors shrink-0",
@@ -121,10 +123,10 @@ function SessionHeader({
             variant="outline"
             className="shrink-0"
             onClick={onCopySessionId}
-            title={`Copy Session ID: ${detail.session_id}`}
+            title={t("session.copySessionId", { id: detail.session_id })}
           >
             <Copy className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Session ID</span>
+            <span className="hidden md:inline">{t("session.sessionId")}</span>
           </Button>
 
           <DeleteSessionButton title={fullTitle} onConfirm={onDeleteSession} />
@@ -156,7 +158,10 @@ function SessionHeader({
         </span>
         <span
           className="font-mono text-[11px] text-muted-foreground whitespace-nowrap"
-          title={`Started ${formatTs(detail.started_at)} · Duration ${formatDuration(detail.duration_sec)}`}
+          title={t("session.started", {
+            time: formatTs(detail.started_at),
+            duration: formatDuration(detail.duration_sec),
+          })}
         >
           {formatTs(detail.started_at)}
           <span className="opacity-40"> · </span>

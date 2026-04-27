@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Tags } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TagSummary } from "@/lib/types";
@@ -19,6 +20,7 @@ function TagFilterPopover({
   open,
   setOpen,
 }: TagFilterPopoverProps) {
+  const { t } = useTranslation();
   const wrapperRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
@@ -39,30 +41,30 @@ function TagFilterPopover({
       <ChipButton
         active={activeCount > 0}
         onClick={() => setOpen(!open)}
-        title="Filter by tags (OR)"
+        title={t("tags.filterByTags")}
         icon={<Tags className="h-3 w-3" />}
         trailing={<ChevronDown className="h-3 w-3 opacity-60" />}
       >
-        {activeCount > 0 ? `Tags (${activeCount})` : "Tags"}
+        {activeCount > 0 ? t("tags.tagsCount", { count: activeCount }) : t("tags.tags")}
       </ChipButton>
 
       {open ? (
         <div className="absolute left-0 top-9 z-30 w-60 rounded-md border border-border bg-popover p-2 shadow-editorial-lg animate-slide-down">
           <div className="mb-1 flex items-center justify-between px-1 font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-            <span>OR match · click to toggle</span>
+            <span>{t("tags.orMatchToggle")}</span>
             {selectedTags.length > 0 ? (
               <button
                 className="text-accent hover:underline"
                 onClick={() => setSelectedTags([])}
               >
-                clear
+                {t("tags.clear")}
               </button>
             ) : null}
           </div>
           <div className="max-h-56 space-y-0.5 overflow-y-auto scrollbar-thin">
             {allTags.length === 0 ? (
               <div className="px-2 py-6 text-center text-[12px] text-muted-foreground">
-                No tags yet
+                {t("tags.noTagsYet")}
               </div>
             ) : (
               allTags.map((item) => {

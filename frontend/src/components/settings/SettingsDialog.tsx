@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   CheckCircle2,
@@ -37,6 +38,7 @@ import {
   type AiServiceTier,
   type AiSettingsView,
 } from "@/lib/api";
+import i18n from "@/i18n";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -73,9 +75,9 @@ function planBadge(plan: string | null): { label: string; className: string } {
 }
 
 function formatRelative(iso: string | null): string {
-  if (!iso) return "never";
+  if (!iso) return i18n.t("settings.never");
   const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return "never";
+  if (Number.isNaN(ts)) return i18n.t("settings.never");
   const seconds = Math.round((Date.now() - ts) / 1000);
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.round(seconds / 60);
@@ -95,11 +97,12 @@ function QuotaBar({
   remainingPct: number | null;
   resetAt: string | null;
 }) {
+  const { t } = useTranslation();
   if (remainingPct == null) {
     return (
       <div className="text-[11px] text-muted-foreground">
         <span className="font-mono uppercase tracking-overline">{label}</span>{" "}
-        <span className="opacity-70">unknown</span>
+        <span className="opacity-70">{t("settings.unknown")}</span>
       </div>
     );
   }
@@ -126,7 +129,7 @@ function QuotaBar({
       </div>
       {reset ? (
         <div className="text-[10px] font-mono uppercase tracking-overline text-muted-foreground">
-          resets {reset}
+          {t("settings.resets", { time: reset })}
         </div>
       ) : null}
     </div>
@@ -142,6 +145,7 @@ function OpenAiCard({
   onRemove,
   onRelogin,
 }: OpenAiCardProps) {
+  const { t } = useTranslation();
   const plan = planBadge(account.lastCheck?.planType ?? null);
   const checkError = account.lastCheck?.error ?? null;
   return (
@@ -169,16 +173,20 @@ function OpenAiCard({
             </span>
             {isDefault ? (
               <span className="inline-flex items-center gap-1 rounded-sm bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-primary">
-                <Crown className="h-3 w-3" /> default
+                <Crown className="h-3 w-3" /> {t("settings.default")}
               </span>
             ) : null}
           </div>
           <div className="mt-1 text-[11px] font-mono uppercase tracking-overline text-muted-foreground">
             <span>id {account.id.slice(0, 12)}</span>
             <span className="opacity-50"> · </span>
-            <span>used {formatRelative(account.lastUsedAt)}</span>
+            <span>{t("settings.used", { time: formatRelative(account.lastUsedAt) })}</span>
             <span className="opacity-50"> · </span>
-            <span>checked {formatRelative(account.lastCheck?.checkedAt ?? null)}</span>
+            <span>
+              {t("settings.checked", {
+                time: formatRelative(account.lastCheck?.checkedAt ?? null),
+              })}
+            </span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1">
@@ -188,10 +196,10 @@ function OpenAiCard({
               variant="outline"
               disabled={busy}
               onClick={() => onSetDefault(account.id)}
-              title="Set as default OpenAI account"
+              title={t("settings.setDefaultTooltip")}
             >
               <Crown className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Set default</span>
+              <span className="hidden md:inline">{t("settings.setDefault")}</span>
             </Button>
           ) : null}
           <Button
@@ -199,43 +207,43 @@ function OpenAiCard({
             variant="outline"
             disabled={busy}
             onClick={() => onRefresh(account.id)}
-            title="Re-check plan / quota"
+            title={t("settings.refreshTooltip")}
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Refresh</span>
+            <span className="hidden md:inline">{t("common.refresh")}</span>
           </Button>
           <Button
             size="sm"
             variant="outline"
             disabled={busy}
             onClick={() => onRelogin(account.id)}
-            title="Re-run codex login for this account"
+            title={t("settings.reloginTooltip")}
           >
             <LogIn className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Re-login</span>
+            <span className="hidden md:inline">{t("settings.relogin")}</span>
           </Button>
           <Button
             size="sm"
             variant="outline"
             disabled={busy}
             onClick={() => onRemove(account.id)}
-            title="Remove this account"
+            title={t("settings.removeTooltip")}
             className="text-destructive hover:text-destructive"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Remove</span>
+            <span className="hidden md:inline">{t("settings.remove")}</span>
           </Button>
         </div>
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <QuotaBar
-          label="primary window"
+          label={t("settings.primaryWindow")}
           remainingPct={account.lastCheck?.primaryRemainingPercent ?? null}
           resetAt={account.lastCheck?.primaryResetAt ?? null}
         />
         <QuotaBar
-          label="secondary window"
+          label={t("settings.secondaryWindow")}
           remainingPct={account.lastCheck?.secondaryRemainingPercent ?? null}
           resetAt={account.lastCheck?.secondaryResetAt ?? null}
         />
@@ -261,10 +269,11 @@ interface CursorPanelProps {
 }
 
 function CursorPanel({ state, busy, loginUrl, onLogin, onLogout, onRefresh }: CursorPanelProps) {
+  const { t } = useTranslation();
   if (!state) {
     return (
       <div className="rounded-lg border border-border bg-surface p-4 text-[13px] text-muted-foreground">
-        Loading Cursor account state…
+        {t("settings.loadingCursorState")}
       </div>
     );
   }
@@ -274,11 +283,8 @@ function CursorPanel({ state, busy, loginUrl, onLogin, onLogout, onRefresh }: Cu
         <div className="flex items-start gap-2 text-[13px] text-amber-700 dark:text-amber-300">
           <TriangleAlert className="mt-[1px] h-4 w-4 shrink-0" />
           <div>
-            <div className="font-medium">cursor-agent CLI not found</div>
-            <p className="mt-1 text-muted-foreground">
-              Install Cursor desktop and ensure <code>cursor-agent</code> is on PATH.
-              Then come back and click "Login Cursor".
-            </p>
+            <div className="font-medium">{t("settings.cursorCliNotFound")}</div>
+            <p className="mt-1 text-muted-foreground">{t("settings.cursorCliNotFoundDesc")}</p>
           </div>
         </div>
       </div>
@@ -291,11 +297,11 @@ function CursorPanel({ state, busy, loginUrl, onLogin, onLogout, onRefresh }: Cu
           <div className="flex flex-wrap items-center gap-2">
             {state.loggedIn ? (
               <span className="inline-flex items-center gap-1 rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="h-3 w-3" /> logged in
+                <CheckCircle2 className="h-3 w-3" /> {t("settings.loggedIn")}
               </span>
             ) : (
               <span className="inline-flex items-center rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                signed out
+                {t("settings.signedOut")}
               </span>
             )}
             {state.plan ? (
@@ -305,10 +311,11 @@ function CursorPanel({ state, busy, loginUrl, onLogin, onLogout, onRefresh }: Cu
             ) : null}
           </div>
           <div className="mt-1 text-[14px] font-medium text-foreground">
-            {state.email || (state.loggedIn ? "Account email unavailable" : "Not signed in")}
+            {state.email ||
+              (state.loggedIn ? t("settings.emailUnavailable") : t("settings.notSignedIn"))}
           </div>
           <div className="mt-1 text-[11px] font-mono uppercase tracking-overline text-muted-foreground">
-            tokens stored in macOS Keychain by cursor-agent
+            {t("settings.keychainNote")}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1">
@@ -319,14 +326,14 @@ function CursorPanel({ state, busy, loginUrl, onLogin, onLogout, onRefresh }: Cu
                 variant="outline"
                 disabled={busy}
                 onClick={onRefresh}
-                title="Re-query cursor-agent (otherwise cached for ~60s)"
+                title={t("settings.refreshCursorTooltip")}
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">Refresh</span>
+                <span className="hidden md:inline">{t("common.refresh")}</span>
               </Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={onLogin}>
                 <LogIn className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">Re-login</span>
+                <span className="hidden md:inline">{t("settings.relogin")}</span>
               </Button>
               <Button
                 size="sm"
@@ -336,7 +343,7 @@ function CursorPanel({ state, busy, loginUrl, onLogin, onLogout, onRefresh }: Cu
                 className="text-destructive hover:text-destructive"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">Logout</span>
+                <span className="hidden md:inline">{t("settings.logout")}</span>
               </Button>
             </>
           ) : (
@@ -346,7 +353,7 @@ function CursorPanel({ state, busy, loginUrl, onLogin, onLogout, onRefresh }: Cu
               ) : (
                 <LogIn className="h-3.5 w-3.5" />
               )}
-              Login Cursor
+              {t("settings.loginCursor")}
             </Button>
           )}
         </div>
@@ -362,7 +369,7 @@ function CursorPanel({ state, busy, loginUrl, onLogin, onLogout, onRefresh }: Cu
       {loginUrl ? (
         <div className="mt-3 rounded-md border border-primary/30 bg-primary-soft/40 px-3 py-2 text-[12px] text-foreground">
           <div className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-            login url
+            {t("settings.loginUrl")}
           </div>
           <div className="mt-1 flex items-center gap-2">
             <a
@@ -394,25 +401,23 @@ function DefaultProviderControl({
   hasCursor,
   onChange,
 }: DefaultProviderControlProps) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border border-border bg-background-soft p-4">
       <div className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-        Default provider
+        {t("settings.defaultProvider")}
       </div>
       <div className="mt-1 text-[13px] text-muted-foreground">
-        Smart Export and Ask AI both fall back to this provider when no override is
-        specified.
+        {t("settings.defaultProviderDesc")}
       </div>
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <ProviderRadio
           provider="openai"
           active={settings.defaultProvider === "openai"}
           available={hasOpenAi}
-          title="OpenAI / ChatGPT"
+          title={t("settings.openaiTitle")}
           subtitle={
-            hasOpenAi
-              ? "Routes to your default ChatGPT account."
-              : "Add a ChatGPT account first."
+            hasOpenAi ? t("settings.openaiRoutesDefault") : t("settings.openaiAddFirst")
           }
           onSelect={() => onChange("openai")}
         />
@@ -420,12 +425,8 @@ function DefaultProviderControl({
           provider="cursor"
           active={settings.defaultProvider === "cursor"}
           available={hasCursor}
-          title="Cursor Agent"
-          subtitle={
-            hasCursor
-              ? "Uses the signed-in Cursor account."
-              : "Login to Cursor first."
-          }
+          title={t("settings.cursorTitle")}
+          subtitle={hasCursor ? t("settings.cursorRoutesDefault") : t("settings.cursorLoginFirst")}
           onSelect={() => onChange("cursor")}
         />
       </div>
@@ -451,15 +452,16 @@ function ModelPicker({
   warning,
   onChange,
 }: ModelPickerProps) {
+  const { t } = useTranslation();
   const cliDefault = models.find((m) => m.isDefault);
   const cliDefaultLabel = cliDefault
-    ? `Provider default · ${cliDefault.label}`
-    : "Provider default";
+    ? t("settings.providerDefaultLabel", { label: cliDefault.label })
+    : t("settings.providerDefault");
   return (
     <div className="mt-3 rounded-md border border-border bg-surface px-3 py-2.5">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-          Default model · {provider}
+          {t("settings.defaultModel", { provider })}
         </span>
         {value ? (
           <button
@@ -467,13 +469,12 @@ function ModelPicker({
             onClick={() => onChange(null)}
             className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground transition-colors hover:text-foreground"
           >
-            reset
+            {t("common.reset")}
           </button>
         ) : null}
       </div>
       <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-        Smart Export and Ask AI fall back to this model. Leave on the provider
-        default to mirror the CLI's <code>/model</code> selection.
+        {t("settings.modelDesc")}
       </p>
       <div className="mt-2 flex items-center gap-2">
         <select
@@ -505,25 +506,27 @@ function ModelPicker({
         </div>
       ) : null}
       {!loading && models.length === 0 && !warning ? (
-        <div className="mt-2 text-[11.5px] text-muted-foreground">
-          No models reported by the CLI yet — sign in or run{" "}
-          <code>cursor-agent --list-models</code> manually to verify.
-        </div>
+        <div className="mt-2 text-[11.5px] text-muted-foreground">{t("settings.noModels")}</div>
       ) : null}
     </div>
   );
 }
 
-// Mirrors codex-rs effort_rank ordering: more effort = more "thinking time".
-// Labels chosen to match codex CLI's `/model` picker so muscle memory transfers.
-const EFFORT_LABELS: Record<AiReasoningEffort, { title: string; hint: string }> = {
-  none: { title: "None", hint: "Skip reasoning · fastest, lowest cost" },
-  minimal: { title: "Minimal", hint: "Tiny scratchpad · low latency" },
-  low: { title: "Low", hint: "Quick think · efficient" },
-  medium: { title: "Medium", hint: "Balanced quality / speed (CLI default)" },
-  high: { title: "High", hint: "Deeper plan · slower" },
-  xhigh: { title: "X-High", hint: "Maximum effort · multi-minute responses" },
-};
+function effortLabelPair(
+  effort: AiReasoningEffort,
+  t: (key: string) => string
+): { title: string; hint: string } {
+  const pairs: Record<AiReasoningEffort, [string, string]> = {
+    none: ["settings.effortNone", "settings.effortNoneHint"],
+    minimal: ["settings.effortMinimal", "settings.effortMinimalHint"],
+    low: ["settings.effortLow", "settings.effortLowHint"],
+    medium: ["settings.effortMedium", "settings.effortMediumHint"],
+    high: ["settings.effortHigh", "settings.effortHighHint"],
+    xhigh: ["settings.effortXhigh", "settings.effortXhighHint"],
+  };
+  const [titleKey, hintKey] = pairs[effort];
+  return { title: t(titleKey), hint: t(hintKey) };
+}
 
 interface ReasoningEffortPickerProps {
   efforts: AiReasoningEffort[];
@@ -542,12 +545,13 @@ function ReasoningEffortPicker({
   activeModelId,
   modelSupportsReasoning,
 }: ReasoningEffortPickerProps) {
+  const { t } = useTranslation();
   if (efforts.length === 0) return null;
   return (
     <div className="mt-3 rounded-md border border-border bg-surface px-3 py-2.5">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-          Reasoning effort · openai
+          {t("settings.reasoningEffort")}
         </span>
         {value ? (
           <button
@@ -555,13 +559,12 @@ function ReasoningEffortPicker({
             onClick={() => onChange(null)}
             className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground transition-colors hover:text-foreground"
           >
-            reset
+            {t("common.reset")}
           </button>
         ) : null}
       </div>
       <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-        How hard the model "thinks" before answering. Mirrors{" "}
-        <code>model_reasoning_effort</code> in <code>~/.codex/config.toml</code>.
+        {t("settings.reasoningEffortDesc")}
       </p>
       <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
         <button
@@ -574,13 +577,15 @@ function ReasoningEffortPicker({
               : "border-border hover:border-foreground/30"
           )}
         >
-          <span className="text-[12.5px] font-medium text-foreground">Model default</span>
+          <span className="text-[12.5px] font-medium text-foreground">
+            {t("settings.modelDefault")}
+          </span>
           <span className="text-[11px] leading-snug text-muted-foreground">
-            Don't override · let the API decide
+            {t("settings.modelDefaultHint")}
           </span>
         </button>
         {efforts.map((effort) => {
-          const meta = EFFORT_LABELS[effort];
+          const meta = effortLabelPair(effort, t);
           const active = value === effort;
           return (
             <button
@@ -603,20 +608,21 @@ function ReasoningEffortPicker({
       {modelSupportsReasoning === false && activeModelId ? (
         <div className="mt-2 flex items-start gap-1.5 text-[11.5px] text-muted-foreground">
           <TriangleAlert className="mt-[1px] h-3.5 w-3.5 shrink-0 text-amber-500" />
-          <span>
-            <code>{activeModelId}</code> is not a reasoning model — effort will be silently
-            ignored by the API. Pick a gpt-5.5 family model to enable thinking.
-          </span>
+          <span>{t("settings.notReasoningModel", { model: activeModelId })}</span>
         </div>
       ) : null}
     </div>
   );
 }
 
-const SERVICE_TIER_LABELS: Record<AiServiceTier, { title: string; hint: string }> = {
-  fast: { title: "Fast (Priority)", hint: "Lowest latency · uses faster pool" },
-  flex: { title: "Flex", hint: "Higher quotas, slower · cheaper for batches" },
-};
+function serviceTierLabelPair(
+  tier: AiServiceTier,
+  t: (key: string) => string
+): { title: string; hint: string } {
+  if (tier === "fast")
+    return { title: t("settings.tierFast"), hint: t("settings.tierFastHint") };
+  return { title: t("settings.tierFlex"), hint: t("settings.tierFlexHint") };
+}
 
 interface ServiceTierPickerProps {
   tiers: AiServiceTier[];
@@ -625,12 +631,13 @@ interface ServiceTierPickerProps {
 }
 
 function ServiceTierPicker({ tiers, value, onChange }: ServiceTierPickerProps) {
+  const { t } = useTranslation();
   if (tiers.length === 0) return null;
   return (
     <div className="mt-3 rounded-md border border-border bg-surface px-3 py-2.5">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-          Service tier · openai
+          {t("settings.serviceTier")}
         </span>
         {value ? (
           <button
@@ -638,13 +645,12 @@ function ServiceTierPicker({ tiers, value, onChange }: ServiceTierPickerProps) {
             onClick={() => onChange(null)}
             className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground transition-colors hover:text-foreground"
           >
-            reset
+            {t("common.reset")}
           </button>
         ) : null}
       </div>
       <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-        Routes the request to the priority or flex pool. Auto = leave it to your plan
-        (matches codex CLI's <code>service_tier</code>).
+        {t("settings.serviceTierDesc")}
       </p>
       <div className="mt-2 grid grid-cols-3 gap-1.5">
         <button
@@ -657,11 +663,13 @@ function ServiceTierPicker({ tiers, value, onChange }: ServiceTierPickerProps) {
               : "border-border hover:border-foreground/30"
           )}
         >
-          <span className="text-[12.5px] font-medium text-foreground">Auto</span>
-          <span className="text-[11px] leading-snug text-muted-foreground">Plan default</span>
+          <span className="text-[12.5px] font-medium text-foreground">{t("settings.auto")}</span>
+          <span className="text-[11px] leading-snug text-muted-foreground">
+            {t("settings.planDefault")}
+          </span>
         </button>
         {tiers.map((tier) => {
-          const meta = SERVICE_TIER_LABELS[tier];
+          const meta = serviceTierLabelPair(tier, t);
           const active = value === tier;
           return (
             <button
@@ -752,6 +760,7 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   // changes propagate without frontend code changes.
   const [reasoningEfforts, setReasoningEfforts] = React.useState<AiReasoningEffort[]>([]);
   const [serviceTiers, setServiceTiers] = React.useState<AiServiceTier[]>([]);
+  const { t } = useTranslation();
   const { push: pushToast, dismiss: dismissToast } = useToast();
   const abortRef = React.useRef<AbortController | null>(null);
 
@@ -775,13 +784,13 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setCursorBusy(true);
     try {
       await refresh({ refreshCursor: true });
-      pushToast("Refreshed Cursor account state", "success");
+      pushToast(t("settings.refreshedCursor"), "success");
     } catch (err) {
-      pushToast(`Refresh failed: ${String(err)}`, "error");
+      pushToast(t("settings.refreshFailed", { error: String(err) }), "error");
     } finally {
       setCursorBusy(false);
     }
-  }, [pushToast, refresh]);
+  }, [pushToast, refresh, t]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -826,7 +835,7 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const handleAddOpenAi = React.useCallback(async () => {
     setOpenAiLoginUrl(null);
     setOpenAiLoginBusy(true);
-    const toastId = pushToast("Starting ChatGPT login…", "loading");
+    const toastId = pushToast(t("settings.startingChatGPTLogin"), "loading");
     const ac = new AbortController();
     abortRef.current?.abort();
     abortRef.current = ac;
@@ -836,25 +845,25 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           setOpenAiLoginUrl(event.url);
           window.open(event.url, "_blank", "noopener,noreferrer");
           dismissToast(toastId);
-          pushToast("Browser opened — finish login there", "info");
+          pushToast(t("settings.browserOpened"), "info");
         } else if (event.type === "success") {
           setSnapshot(event.snapshot);
           setOpenAiLoginUrl(null);
-          pushToast("ChatGPT account added", "success");
+          pushToast(t("settings.chatgptAdded"), "success");
         } else if (event.type === "error") {
-          pushToast(`ChatGPT login failed: ${event.error}`, "error");
+          pushToast(t("settings.chatgptLoginFailed", { error: event.error }), "error");
           setOpenAiLoginUrl(null);
           break;
         }
       }
     } catch (err) {
-      pushToast(`ChatGPT login error: ${String(err)}`, "error");
+      pushToast(t("settings.chatgptLoginError", { error: String(err) }), "error");
     } finally {
       dismissToast(toastId);
       setOpenAiLoginBusy(false);
       abortRef.current = null;
     }
-  }, [dismissToast, pushToast]);
+  }, [dismissToast, pushToast, t]);
 
   const handleSetDefault = React.useCallback(
     async (id: string) => {
@@ -862,14 +871,14 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       try {
         const next = await setDefaultOpenAiAccount(id);
         setSnapshot(next);
-        pushToast("Default ChatGPT account updated", "success");
+        pushToast(t("settings.defaultUpdated"), "success");
       } catch (err) {
-        pushToast(`Set default failed: ${String(err)}`, "error");
+        pushToast(t("settings.setDefaultFailed", { error: String(err) }), "error");
       } finally {
         setBusyAccount(null);
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   const handleRefreshAccount = React.useCallback(
@@ -878,40 +887,38 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       try {
         const next = await refreshOpenAiAccount(id);
         setSnapshot(next);
-        pushToast("Refreshed quota", "success");
+        pushToast(t("settings.refreshedQuota"), "success");
       } catch (err) {
-        pushToast(`Refresh failed: ${String(err)}`, "error");
+        pushToast(t("settings.refreshFailed", { error: String(err) }), "error");
       } finally {
         setBusyAccount(null);
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   const handleRemoveAccount = React.useCallback(
     async (id: string) => {
-      const confirm = window.confirm(
-        "Remove this ChatGPT account? Reunion will delete its codex-home and forget tokens."
-      );
+      const confirm = window.confirm(t("settings.removeConfirm"));
       if (!confirm) return;
       setBusyAccount(id);
       try {
         const next = await deleteOpenAiAccount(id);
         setSnapshot(next);
-        pushToast("ChatGPT account removed", "success");
+        pushToast(t("settings.accountRemoved"), "success");
       } catch (err) {
-        pushToast(`Remove failed: ${String(err)}`, "error");
+        pushToast(t("settings.removeFailed", { error: String(err) }), "error");
       } finally {
         setBusyAccount(null);
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   const handleCursorLogin = React.useCallback(async () => {
     setCursorLoginUrl(null);
     setCursorBusy(true);
-    const toastId = pushToast("Starting Cursor login…", "loading");
+    const toastId = pushToast(t("settings.startingCursorLogin"), "loading");
     const ac = new AbortController();
     abortRef.current?.abort();
     abortRef.current = ac;
@@ -921,38 +928,38 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           setCursorLoginUrl(event.url);
           window.open(event.url, "_blank", "noopener,noreferrer");
           dismissToast(toastId);
-          pushToast("Browser opened — finish login there", "info");
+          pushToast(t("settings.browserOpened"), "info");
         } else if (event.type === "success") {
           setSnapshot(event.snapshot);
           setCursorLoginUrl(null);
-          pushToast("Cursor signed in", "success");
+          pushToast(t("settings.cursorSignedIn"), "success");
         } else if (event.type === "error") {
-          pushToast(`Cursor login failed: ${event.error}`, "error");
+          pushToast(t("settings.cursorLoginFailed", { error: event.error }), "error");
           setCursorLoginUrl(null);
           break;
         }
       }
     } catch (err) {
-      pushToast(`Cursor login error: ${String(err)}`, "error");
+      pushToast(t("settings.cursorLoginError", { error: String(err) }), "error");
     } finally {
       dismissToast(toastId);
       setCursorBusy(false);
       abortRef.current = null;
     }
-  }, [dismissToast, pushToast]);
+  }, [dismissToast, pushToast, t]);
 
   const handleCursorLogout = React.useCallback(async () => {
     setCursorBusy(true);
     try {
       const next = await logoutCursor();
       setSnapshot(next);
-      pushToast("Cursor signed out", "success");
+      pushToast(t("settings.cursorSignedOut"), "success");
     } catch (err) {
-      pushToast(`Logout failed: ${String(err)}`, "error");
+      pushToast(t("settings.logoutFailed", { error: String(err) }), "error");
     } finally {
       setCursorBusy(false);
     }
-  }, [pushToast]);
+  }, [pushToast, t]);
 
   const handleProviderChange = React.useCallback(
     async (provider: AiProvider) => {
@@ -964,10 +971,10 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         const next = await updateAiSettings({ provider, model: null });
         setSnapshot(next);
       } catch (err) {
-        pushToast(`Update settings failed: ${String(err)}`, "error");
+        pushToast(t("settings.updateSettingsFailed", { error: String(err) }), "error");
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   const handleModelChange = React.useCallback(
@@ -976,15 +983,15 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         const next = await updateAiSettings({ model });
         setSnapshot(next);
         if (model) {
-          pushToast(`Default model set to ${model}`, "success");
+          pushToast(t("settings.defaultModelSet", { model }), "success");
         } else {
-          pushToast("Default model cleared (using provider default)", "info");
+          pushToast(t("settings.defaultModelCleared"), "info");
         }
       } catch (err) {
-        pushToast(`Update model failed: ${String(err)}`, "error");
+        pushToast(t("settings.updateModelFailed", { error: String(err) }), "error");
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   const handleReasoningEffortChange = React.useCallback(
@@ -994,15 +1001,15 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         setSnapshot(next);
         pushToast(
           effort
-            ? `Reasoning effort: ${effort}`
-            : "Reasoning effort cleared (model default)",
+            ? t("settings.reasoningEffortSet", { effort })
+            : t("settings.reasoningEffortCleared"),
           "info"
         );
       } catch (err) {
-        pushToast(`Update reasoning failed: ${String(err)}`, "error");
+        pushToast(t("settings.updateReasoningFailed", { error: String(err) }), "error");
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   const handleServiceTierChange = React.useCallback(
@@ -1011,14 +1018,14 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         const next = await updateAiSettings({ serviceTier: tier });
         setSnapshot(next);
         pushToast(
-          tier ? `Service tier: ${tier}` : "Service tier cleared (auto)",
+          tier ? t("settings.serviceTierSet", { tier }) : t("settings.serviceTierCleared"),
           "info"
         );
       } catch (err) {
-        pushToast(`Update service tier failed: ${String(err)}`, "error");
+        pushToast(t("settings.updateTierFailed", { error: String(err) }), "error");
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   const settings: AiSettingsView | null = snapshot?.settings ?? null;
@@ -1035,15 +1042,15 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       onClose={onClose}
       title={
         <span className="inline-flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" /> Settings
+          <Sparkles className="h-4 w-4 text-primary" /> {t("settings.title")}
         </span>
       }
-      description="Manage AI providers used by Smart Export, Ask AI, and future cross-session insights. Tokens stay with their CLI: codex stores them in isolated codex-homes, cursor-agent in macOS Keychain. Reunion never persists raw tokens."
+      description={t("settings.description")}
       footer={
         <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-overline text-muted-foreground">
-          <span>v0.2 · ai providers</span>
+          <span>{t("settings.version")}</span>
           <Button size="sm" variant="ghost" onClick={onClose}>
-            Close
+            {t("settings.close")}
           </Button>
         </div>
       }
@@ -1100,10 +1107,10 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         <header className="mb-3 flex items-center justify-between">
           <div>
             <h3 className="font-serif text-[15px] font-semibold tracking-tight text-foreground">
-              OpenAI / ChatGPT accounts
+              {t("settings.openaiAccounts")}
             </h3>
             <p className="text-[12px] text-muted-foreground">
-              Each account gets an isolated <code>CODEX_HOME</code>. Multi-account safe.
+              {t("settings.openaiAccountsDesc")}
             </p>
           </div>
           <Button
@@ -1117,14 +1124,14 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             ) : (
               <Plus className="h-3.5 w-3.5" />
             )}
-            Add ChatGPT account
+            {t("settings.addChatGPT")}
           </Button>
         </header>
 
         {openAiLoginUrl ? (
           <div className="mb-3 rounded-md border border-primary/30 bg-primary-soft/40 px-3 py-2 text-[12px]">
             <div className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
-              waiting for codex login
+              {t("settings.waitingForLogin")}
             </div>
             <div className="mt-1 flex items-center gap-2">
               <a
@@ -1142,17 +1149,14 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 
         {loading && !snapshot ? (
           <div className="rounded-lg border border-dashed border-border bg-background-soft p-6 text-center text-[13px] text-muted-foreground">
-            Loading accounts…
+            {t("settings.loadingAccounts")}
           </div>
         ) : openAiAccounts.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-background-soft p-6 text-center">
             <p className="text-[13px] font-medium text-foreground">
-              No ChatGPT accounts yet
+              {t("settings.noChatGPTAccounts")}
             </p>
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              Click "Add ChatGPT account" to spawn <code>codex login</code> against an
-              isolated <code>CODEX_HOME</code>. Make sure the codex CLI is installed.
-            </p>
+            <p className="mt-1 text-[12px] text-muted-foreground">{t("settings.noChatGPTDesc")}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -1175,11 +1179,10 @@ function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       <section className="mt-6">
         <header className="mb-3">
           <h3 className="font-serif text-[15px] font-semibold tracking-tight text-foreground">
-            Cursor Agent
+            {t("settings.cursorAgent")}
           </h3>
           <p className="text-[12px] text-muted-foreground">
-            Single-account only — tokens live in macOS Keychain, managed by
-            <code className="ml-1">cursor-agent</code>.
+            {t("settings.cursorAgentDesc")}
           </p>
         </header>
         <CursorPanel

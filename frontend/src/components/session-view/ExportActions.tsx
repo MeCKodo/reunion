@@ -1,4 +1,5 @@
 import { Download, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { ExportKind } from "@/lib/api";
 
@@ -16,12 +17,13 @@ interface ExportButtonProps {
 }
 
 function ExportButton({ label, shortLabel, loading, disabled, onClick }: ExportButtonProps) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={`${label} – generated with the default AI provider in Settings`}
+      title={t("export.exportTooltip", { label })}
       className={cn(
         "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5 text-[12px] font-medium text-foreground",
         "transition-colors hover:bg-background-soft hover:border-foreground/30",
@@ -41,19 +43,20 @@ function ExportButton({ label, shortLabel, loading, disabled, onClick }: ExportB
 }
 
 function ExportActions({ onExport, loadingKind }: ExportActionsProps) {
+  const { t } = useTranslation();
   const busy = loadingKind !== "";
   return (
     <>
       <ExportButton
-        label="Smart Rules"
-        shortLabel="Rules"
+        label={t("export.smartRules")}
+        shortLabel={t("export.rules")}
         loading={loadingKind === "rules"}
         disabled={busy}
         onClick={() => onExport("rules")}
       />
       <ExportButton
-        label="Smart Skill"
-        shortLabel="Skill"
+        label={t("export.smartSkill")}
+        shortLabel={t("export.skill")}
         loading={loadingKind === "skill"}
         disabled={busy}
         onClick={() => onExport("skill")}

@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import type { HistoryCategory } from "./types";
 
 export function prettifyRepoName(repo: string): string {
@@ -57,10 +58,10 @@ export function relativeTime(ts: number): string {
 }
 
 export function historyCategoryLabel(category: HistoryCategory): string {
-  if (category === "assistant") return "Cursor";
-  if (category === "tool") return "Tool";
-  if (category === "system") return "System";
-  return "User";
+  if (category === "assistant") return i18n.t("format.assistant");
+  if (category === "tool") return i18n.t("format.tool");
+  if (category === "system") return i18n.t("format.system");
+  return i18n.t("format.user");
 }
 
 export function buildHistoryPreview(text: string): string {

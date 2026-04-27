@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -290,6 +291,7 @@ function CollapsibleText({
   accent: AccentStyles;
   queryTokens: string[];
 }) {
+  const { t } = useTranslation();
   const lines = text.split(/\r?\n/);
   const totalLines = lines.length;
   // "Long" if either line count or char count exceeds the preview budget.
@@ -339,10 +341,10 @@ function CollapsibleText({
           )}
           <span>
             {expanded
-              ? "收起"
+              ? t("tool.collapse")
               : hiddenLines > 0
-                ? `展开剩余 ${hiddenLines} 行 · 共 ${totalLines} 行`
-                : "展开全文"}
+                ? t("tool.expandRemaining", { hidden: hiddenLines, total: totalLines })
+                : t("tool.expandAll")}
           </span>
         </button>
       ) : null}
@@ -431,6 +433,7 @@ export function StructuredToolInput({
   category: ToolCategory;
   queryTokens: string[];
 }) {
+  const { t } = useTranslation();
   const accent = ACCENTS[category] ?? ACCENTS.default;
 
   // Drop nil / empty-string values; they add noise without information.
@@ -488,7 +491,7 @@ export function StructuredToolInput({
               className="h-3 w-3 transition-transform group-open:rotate-90"
               strokeWidth={2.25}
             />
-            <span>其他参数 · {rest.length}</span>
+            <span>{t("tool.otherParams", { count: rest.length })}</span>
           </summary>
           <div className="mt-2 space-y-3">
             {rest.map(([k, v]) => (
