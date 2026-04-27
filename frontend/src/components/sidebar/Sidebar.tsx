@@ -1,7 +1,8 @@
 import * as React from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Settings as SettingsIcon } from "lucide-react";
 import { SessionListSkeleton } from "@/components/shared/Skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { cn } from "@/lib/utils";
 import type {
   RepoGroup,
@@ -105,6 +106,7 @@ function Sidebar(props: SidebarProps) {
   const isMacElectron = useIsMacElectron();
   const headerDragStyle = isMacElectron ? DRAG_STYLE : undefined;
   const headerNoDragStyle = isMacElectron ? NO_DRAG_STYLE : undefined;
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   return (
     <aside
@@ -127,17 +129,28 @@ function Sidebar(props: SidebarProps) {
             <ReunionMark className="h-[18px] w-[18px]" />
             Reunion
           </div>
-          <Tooltip text="Rescan all workspaces for new conversations">
-            <button
-              type="button"
-              onClick={onReindex}
-              aria-label="Reindex"
-              style={headerNoDragStyle}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </button>
-          </Tooltip>
+          <div className="flex items-center gap-0.5" style={headerNoDragStyle}>
+            <Tooltip text="AI providers, accounts, and defaults">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Open Settings"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+              >
+                <SettingsIcon className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+            <Tooltip text="Rescan all workspaces for new conversations">
+              <button
+                type="button"
+                onClick={onReindex}
+                aria-label="Reindex"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          </div>
         </div>
         <div className="mt-3" style={headerNoDragStyle}>
           <SidebarSearch
@@ -206,6 +219,7 @@ function Sidebar(props: SidebarProps) {
           </div>
         )}
       </div>
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );
 }

@@ -4,6 +4,7 @@ import { ScrollToTop } from "@/components/shared/ScrollToTop";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { SessionView } from "@/components/session-view/SessionView";
 import { useToast } from "@/components/ui/toast";
+import { ExportTargetDialog } from "@/components/session-view/ExportTargetDialog";
 import { useAnnotations } from "@/hooks/useAnnotations";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import {
@@ -14,6 +15,7 @@ import {
   fetchSearch,
   fetchSession,
   fetchSources,
+  postOpenPath,
   postReindex,
   type ExportKind,
 } from "@/lib/api";
@@ -75,6 +77,9 @@ export default function App() {
     legacySegmentIndex?: number;
   } | null>(null);
   const [exportLoading, setExportLoading] = useState<"" | ExportKind>("");
+  // Export-to-repo dialog state. Only one kind is open at a time so a single
+  // discriminator on `kind` is enough (null means closed).
+  const [exportDialogKind, setExportDialogKind] = useState<ExportKind | null>(null);
   const [onlyStarred, setOnlyStarred] = usePersistentState<boolean>(
     "filter:starred",
     false
@@ -106,7 +111,11 @@ export default function App() {
   // ── Toast helpers ──────────────────────────────────────────────────
   const { push: pushToast, dismiss: dismissToast } = useToast();
   const notify = useCallback(
-    (message: string, tone: Parameters<typeof pushToast>[1] = "default") => pushToast(message, tone),
+    (
+      message: Parameters<typeof pushToast>[0],
+      tone: Parameters<typeof pushToast>[1] = "default",
+      timeoutMs?: number
+    ) => pushToast(message, tone, timeoutMs),
     [pushToast]
   );
 
@@ -438,11 +447,93 @@ export default function App() {
     }
   }, [detail, notify]);
 
+  // Triggered by the Smart Rules / Smart Skill buttons in the session
+  // header. Instead of going straight to a download we now open a dialog
+  // so the user can confirm the destination repo + path. The legacy
+  // download path is reachable via the dialog's "Download instead" affordance
+  // (and is also used as a fallback when no repo can be detected).
   const onExport = useCallback(
+    (kind: ExportKind) => {
+      if (!detail) return;
+      setExportDialogKind(kind);
+    },
+    [detail]
+  );
+
+  // Used by the dialog when it succeeds. We surface a richer toast with
+  // "Open file" / "Reveal in Finder" actions because that's the second piece
+  // of feedback the user explicitly asked for.
+  const handleExportWritten = useCallback(
+    async (
+      kind: ExportKind,
+      info: { absolutePath: string; relativePath: string; mode: string }
+    ) => {
+      setExportDialogKind(null);
+      const action = (target: "open" | "reveal", id: string) => async () => {
+        try {
+          await postOpenPath(target === "open" ? info.absolutePath : info.absolutePath);
+          if (target === "reveal") {
+            // postOpenPath resolves to "opened" for files; macOS reveals the
+            // parent dir when called with a directory path, so we explicitly
+            // pass the parent for "reveal in finder" semantics.
+            const parent = info.absolutePath.replace(/\/[^/]+$/, "");
+            await postOpenPath(parent);
+          }
+          dismissToast(id);
+        } catch (error) {
+          notify(`Open failed: ${String(error)}`, "error");
+        }
+      };
+      const toastId = `export-${Date.now()}`;
+      pushToast(
+        <span className="flex flex-col gap-1.5">
+          <span>
+            <strong className="font-semibold">
+              Smart {kind === "skill" ? "Skill" : "Rules"} written
+            </strong>{" "}
+            <span className="text-muted-foreground">({info.mode})</span>
+          </span>
+          <code className="break-all rounded bg-background-soft px-1.5 py-0.5 font-mono text-[11.5px] text-muted-foreground">
+            {info.absolutePath}
+          </code>
+          <span className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={action("open", toastId)}
+              className="rounded border border-border-strong bg-surface px-2 py-0.5 text-[11.5px] text-foreground hover:bg-background-soft"
+            >
+              Open file
+            </button>
+            <button
+              type="button"
+              onClick={action("reveal", toastId)}
+              className="rounded border border-border-strong bg-surface px-2 py-0.5 text-[11.5px] text-foreground hover:bg-background-soft"
+            >
+              Reveal in Finder
+            </button>
+          </span>
+        </span>,
+        "success",
+        12000
+      );
+    },
+    [dismissToast, notify, pushToast]
+  );
+
+  // Reachable by the dialog when the user explicitly opts to download rather
+  // than write to repo (e.g. they want to send it to someone else).
+  // Currently kept private because the dialog doesn't surface the
+  // "Download instead" button yet — but the implementation lives here so we
+  // can hook it up without touching App.tsx again.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleExportDownload = useCallback(
     async (kind: ExportKind) => {
       if (!detail) return;
       setExportLoading(kind);
-      const toastId = pushToast(`Exporting ${kind.toUpperCase()}…`, "loading");
+      const toastId = pushToast(
+        `Generating Smart ${kind === "skill" ? "Skill" : "Rules"} via AI… this can take ~30s`,
+        "loading"
+      );
       try {
         const fallback = `${decodeEntities(detail.title || detail.session_id)}-${kind.toUpperCase()}.md`;
         const { blob, mode, warning, filename } = await fetchExport(
@@ -452,15 +543,24 @@ export default function App() {
         );
         downloadBlob(blob, filename);
         dismissToast(toastId);
-        notify(
-          mode === "smart"
-            ? `Exported ${kind.toUpperCase()} (smart)`
-            : `Exported ${kind.toUpperCase()} (fallback)${warning ? ` – ${warning}` : ""}`,
-          mode === "smart" ? "success" : "info"
-        );
+        const fileLine = `Saved to your Downloads folder · ${filename}`;
+        if (mode === "smart") {
+          notify(`Smart ${kind.toUpperCase()} ready · ${fileLine}`, "success", 6000);
+        } else {
+          const reason = warning ? ` (${warning})` : "";
+          notify(
+            `Smart ${kind.toUpperCase()} fell back to basic template${reason} · ${fileLine}`,
+            "info",
+            8000
+          );
+        }
       } catch (error) {
         dismissToast(toastId);
-        notify(`Export failed: ${String(error)}`, "error");
+        notify(
+          `Export failed: ${String(error)} — check Settings if your CLI is signed in.`,
+          "error",
+          8000
+        );
       } finally {
         setExportLoading("");
       }
@@ -755,6 +855,16 @@ export default function App() {
           statusText={status}
         />
       </div>
+
+      {detail && exportDialogKind ? (
+        <ExportTargetDialog
+          open
+          onClose={() => setExportDialogKind(null)}
+          sessionKey={detail.session_key}
+          kind={exportDialogKind}
+          onWritten={(info) => handleExportWritten(exportDialogKind, info)}
+        />
+      ) : null}
 
       {detail ? <ScrollToTop onClick={scrollToTop} label="回到顶部" /> : null}
     </div>

@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
 import { decodeEntities, sanitizeFileName, toPlainText } from "./lib/text";
 import { parseTranscript } from "./transcript";
 import type { ExportKind, ExportMode, ParsedSegment, Session } from "./types";
+import { AiRouterError, runAiToString } from "./ai/router";
+import type { AiProvider } from "./ai/settings";
 
 function ensureSegments(session: Session): ParsedSegment[] {
   return session.segments.length > 0
@@ -143,38 +144,6 @@ function buildSmartPrompt(session: Session, kind: ExportKind, fallbackMarkdown: 
   ].join("\n");
 }
 
-async function runCursorAgent(prompt: string): Promise<string> {
-  const cmd = (process.env.CURSOR_AGENT_CMD || "cursor-agent").trim();
-  const args = ["--print", "--output-format", "text", prompt];
-  return new Promise<string>((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error("cursor-agent timeout after 45s"));
-    }, 45_000);
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += String(chunk);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(stderr || `cursor-agent exited with code ${code}`));
-        return;
-      }
-      resolve(stdout.trim());
-    });
-  });
-}
-
 function isValidSmartMarkdown(kind: ExportKind, markdown: string): boolean {
   const text = markdown.toLowerCase();
   if (kind === "skill") {
@@ -188,18 +157,33 @@ function isValidSmartMarkdown(kind: ExportKind, markdown: string): boolean {
   return text.includes("## objective") && text.includes("## rules") && text.includes("## workflow");
 }
 
+export interface GenerateExportOptions {
+  /** Override provider; otherwise router uses settings.defaultProvider. */
+  provider?: AiProvider;
+  /** OpenAI account id to target (only meaningful when provider==='openai'). */
+  accountId?: string;
+}
+
 export async function generateExportMarkdown(
   session: Session,
   kind: ExportKind,
-  mode: ExportMode
+  mode: ExportMode,
+  options: GenerateExportOptions = {}
 ): Promise<{ markdown: string; mode: ExportMode; warning?: string }> {
-  const fallback = kind === "skill" ? buildSkillMarkdown(session) : buildRulesMarkdown(session);
+  const fallback =
+    kind === "skill" ? buildSkillMarkdown(session) : buildRulesMarkdown(session);
   if (mode !== "smart") {
     return { markdown: fallback, mode: "basic" };
   }
   try {
     const prompt = buildSmartPrompt(session, kind, fallback);
-    const generated = stripCodeFence(await runCursorAgent(prompt));
+    const generated = stripCodeFence(
+      await runAiToString({
+        prompt,
+        provider: options.provider,
+        accountId: options.accountId,
+      })
+    );
     if (!generated || generated.length < 120 || !isValidSmartMarkdown(kind, generated)) {
       return {
         markdown: fallback,
@@ -209,6 +193,13 @@ export async function generateExportMarkdown(
     }
     return { markdown: generated, mode: "smart" };
   } catch (error) {
+    if (error instanceof AiRouterError) {
+      return {
+        markdown: fallback,
+        mode: "basic",
+        warning: `${error.code}: ${error.message}`,
+      };
+    }
     return { markdown: fallback, mode: "basic", warning: String(error) };
   }
 }

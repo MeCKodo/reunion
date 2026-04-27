@@ -6,7 +6,7 @@ export type ToastTone = "default" | "success" | "error" | "info" | "loading";
 
 export interface ToastRecord {
   id: string;
-  message: string;
+  message: React.ReactNode;
   tone: ToastTone;
   createdAt: number;
   timeoutMs?: number;
@@ -14,7 +14,7 @@ export interface ToastRecord {
 
 interface ToastContextValue {
   toasts: ToastRecord[];
-  push: (message: string, tone?: ToastTone, timeoutMs?: number) => string;
+  push: (message: React.ReactNode, tone?: ToastTone, timeoutMs?: number) => string;
   dismiss: (id: string) => void;
 }
 
@@ -34,7 +34,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const push = React.useCallback(
-    (message: string, tone: ToastTone = "default", timeoutMs?: number) => {
+    (message: React.ReactNode, tone: ToastTone = "default", timeoutMs?: number) => {
       const id = Math.random().toString(36).slice(2, 10);
       const duration = timeoutMs ?? (tone === "error" ? 6000 : tone === "loading" ? 0 : 3200);
       setToasts((prev) => [...prev, { id, message, tone, createdAt: Date.now(), timeoutMs: duration }]);

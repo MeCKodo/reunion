@@ -38,6 +38,15 @@ import {
 } from "./lib/delete-session";
 import { searchSessions } from "./search";
 import { generateExportMarkdown } from "./export";
+import { dispatchAi } from "./ai/http-handlers";
+import { resolveRepoTarget, setRepoMapping } from "./repo-target";
+import {
+  listBookmarks,
+  listDirectory,
+  resolveBrowsePath,
+} from "./lib/fs-browse";
+import path from "node:path";
+import { promises as fsp } from "node:fs";
 import type {
   DetailedTranscript,
   ExportKind,
@@ -326,10 +335,14 @@ async function handleExport({ res, url }: RouteContext) {
   }
   const kind: ExportKind = (url.searchParams.get("type") || "rules").toLowerCase() === "skill" ? "skill" : "rules";
   const mode: ExportMode = (url.searchParams.get("mode") || "basic").toLowerCase() === "smart" ? "smart" : "basic";
+  const providerParam = url.searchParams.get("provider");
+  const provider =
+    providerParam === "openai" || providerParam === "cursor" ? providerParam : undefined;
+  const accountId = url.searchParams.get("accountId") || undefined;
 
   const safeTitle = sanitizeFileName(session.title || session.sessionId);
   const fileName = `${safeTitle}-${kind === "skill" ? "SKILL" : "RULES"}.md`;
-  const generated = await generateExportMarkdown(session, kind, mode);
+  const generated = await generateExportMarkdown(session, kind, mode, { provider, accountId });
   const data = Buffer.from(generated.markdown, "utf-8");
 
   res.statusCode = 200;
@@ -346,11 +359,259 @@ async function handleExport({ res, url }: RouteContext) {
 }
 
 // ---------------------------------------------------------------------------
+// repo target / fs browser / write-to-repo
+// ---------------------------------------------------------------------------
+
+/**
+ * Cap the auto-generated slug at ~40 chars so we don't propose a relative
+ * path that's awkward to type or pushes against filesystem name limits when
+ * the session title is a long Chinese sentence. We measure characters not
+ * bytes — long Chinese titles look fine at ~40 glyphs even though they'd
+ * be ~120 bytes encoded.
+ */
+function makeShortSlug(input: string): string {
+  const cleaned = sanitizeFileName(input).toLowerCase();
+  if (cleaned.length <= 48) return cleaned;
+  return cleaned.slice(0, 48).replace(/-+$/, "");
+}
+
+/**
+ * GET /api/export/target/:sessionKey
+ *
+ * Returns the inferred destination directory for write-to-repo, plus the
+ * default relative file path (`.cursor/rules/<slug>.mdc` or
+ * `.claude/skills/<slug>/SKILL.md`). The frontend uses this to populate the
+ * "where will this go?" preview. `kind` is required; we honor it for the
+ * relative path so Rules and Skills land in their respective conventional
+ * locations.
+ */
+async function handleExportTarget({ res, url }: RouteContext) {
+  const indexData = await loadIndex();
+  const sessionKey = decodeURIComponent(url.pathname.replace("/api/export/target/", ""));
+  const session = indexData.sessions.find((item) => item.sessionKey === sessionKey);
+  if (!session) {
+    json(res, 404, { ok: false, error: "session not found" });
+    return;
+  }
+  const kindParam = (url.searchParams.get("kind") || "rules").toLowerCase();
+  const kind: ExportKind = kindParam === "skill" ? "skill" : "rules";
+  const override = url.searchParams.get("path") || undefined;
+  const target = await resolveRepoTarget(session, { override });
+  const slug = makeShortSlug(session.title || session.sessionId);
+  const relPath =
+    kind === "skill"
+      ? path.join(".claude", "skills", slug, "SKILL.md")
+      : path.join(".cursor", "rules", `${slug}.mdc`);
+  let absPath: string | undefined;
+  let fileExists = false;
+  if (target.path) {
+    absPath = path.join(target.path, relPath);
+    try {
+      await fsp.access(absPath);
+      fileExists = true;
+    } catch {
+      // ignore — file just doesn't exist yet, which is the happy path
+    }
+  }
+  json(res, 200, {
+    ok: true,
+    repo: {
+      path: target.path || null,
+      source: target.source,
+      exists: target.exists,
+      isGitRepo: target.isGitRepo,
+    },
+    relativePath: relPath,
+    absolutePath: absPath || null,
+    fileExists,
+    slug,
+  });
+}
+
+/**
+ * GET /api/fs/list?path=...
+ *
+ * Lists subdirectories of `path` (defaulting to $HOME). Used by the directory
+ * picker in the Smart Export dialog when we couldn't auto-detect a repo or
+ * the user wants to override our guess. Always returns directories only and
+ * marks any sub-entry that contains a `.git` so the UI can show a repo chip.
+ */
+async function handleFsList({ res, url }: RouteContext) {
+  const requestedPath = url.searchParams.get("path");
+  const absPath = resolveBrowsePath(requestedPath);
+  try {
+    const result = await listDirectory(absPath);
+    const bookmarks = await listBookmarks();
+    json(res, 200, { ok: true, ...result, bookmarks });
+  } catch (error) {
+    json(res, 400, {
+      ok: false,
+      error: String((error as Error)?.message || error),
+      path: absPath,
+    });
+  }
+}
+
+interface ExportWriteBody {
+  sessionKey: string;
+  kind: ExportKind;
+  mode: ExportMode;
+  /** absolute repo root the user confirmed */
+  targetDir: string;
+  /** relative path inside targetDir; if omitted, server picks a sensible default */
+  relativePath?: string;
+  overwrite?: boolean;
+  rememberMapping?: boolean;
+  provider?: "openai" | "cursor";
+  accountId?: string;
+}
+
+/**
+ * POST /api/export/write
+ *
+ * Generates the Smart Rules/Skill markdown and writes it directly into the
+ * target repo. Returns the absolute file path on success so the UI can
+ * surface a "Open file" / "Reveal in Finder" affordance. Refuses to clobber
+ * existing files unless `overwrite=true` is set explicitly.
+ *
+ * If `rememberMapping` is true and the write succeeds, persists the
+ * `session.repo → targetDir` association so future exports for the same
+ * project bucket auto-fill the directory.
+ */
+async function handleExportWrite({ req, res }: RouteContext) {
+  const body = await readJsonBody<Partial<ExportWriteBody>>(req, {});
+  const sessionKey = String(body.sessionKey || "").trim();
+  const targetDir = String(body.targetDir || "").trim();
+  if (!sessionKey || !targetDir) {
+    json(res, 400, { ok: false, error: "sessionKey and targetDir are required" });
+    return;
+  }
+
+  const indexData = await loadIndex();
+  const session = indexData.sessions.find((item) => item.sessionKey === sessionKey);
+  if (!session) {
+    json(res, 404, { ok: false, error: "session not found" });
+    return;
+  }
+
+  const kindRaw = (body.kind || "rules").toLowerCase();
+  const kind: ExportKind = kindRaw === "skill" ? "skill" : "rules";
+  const modeRaw = (body.mode || "smart").toLowerCase();
+  const mode: ExportMode = modeRaw === "smart" ? "smart" : "basic";
+
+  // Validate the target dir actually exists and is a directory before we go
+  // burn 30s of AI generation only to fail at the write step.
+  try {
+    const stat = await fsp.stat(targetDir);
+    if (!stat.isDirectory()) {
+      json(res, 400, { ok: false, error: `not a directory: ${targetDir}` });
+      return;
+    }
+  } catch (error) {
+    json(res, 400, {
+      ok: false,
+      error: `target directory missing: ${String((error as Error)?.message || error)}`,
+    });
+    return;
+  }
+
+  const slug = makeShortSlug(session.title || session.sessionId);
+  const defaultRel =
+    kind === "skill"
+      ? path.join(".claude", "skills", slug, "SKILL.md")
+      : path.join(".cursor", "rules", `${slug}.mdc`);
+  const requestedRel = (body.relativePath || defaultRel).replace(/^[\\/]+/, "");
+  // Resolve against the target dir and re-check we didn't escape it via
+  // `..`. Anything pointing outside the chosen folder is rejected.
+  const absPath = path.resolve(targetDir, requestedRel);
+  const targetDirReal = path.resolve(targetDir);
+  if (!absPath.startsWith(targetDirReal + path.sep) && absPath !== targetDirReal) {
+    json(res, 400, { ok: false, error: "relativePath must stay inside targetDir" });
+    return;
+  }
+
+  const overwrite = body.overwrite === true;
+  let fileExisted = false;
+  try {
+    await fsp.access(absPath);
+    fileExisted = true;
+  } catch {
+    // file doesn't exist — go ahead
+  }
+  if (fileExisted && !overwrite) {
+    json(res, 409, {
+      ok: false,
+      error: "file already exists",
+      absolutePath: absPath,
+      relativePath: requestedRel,
+    });
+    return;
+  }
+
+  const generated = await generateExportMarkdown(session, kind, mode, {
+    provider: body.provider,
+    accountId: body.accountId,
+  });
+
+  await fsp.mkdir(path.dirname(absPath), { recursive: true });
+  await fsp.writeFile(absPath, generated.markdown, "utf-8");
+
+  if (body.rememberMapping !== false) {
+    // Default to remembering so the next sibling session auto-fills.
+    await setRepoMapping(session.repo, targetDirReal, session.source);
+  }
+
+  json(res, 200, {
+    ok: true,
+    absolutePath: absPath,
+    relativePath: requestedRel,
+    targetDir: targetDirReal,
+    mode: generated.mode,
+    warning: generated.warning,
+    overwritten: fileExisted,
+    bytes: Buffer.byteLength(generated.markdown, "utf-8"),
+  });
+}
+
+interface OpenPathBody {
+  path: string;
+}
+
+/**
+ * POST /api/open-path
+ *
+ * Opens an arbitrary absolute path in the user's OS file handler. Used by
+ * the "Open file" / "Reveal in Finder" buttons surfaced after a successful
+ * write-to-repo. Distinct from `/api/open-file/<sessionKey>` because that
+ * one only knows about transcript files in the session index.
+ */
+async function handleOpenPath({ req, res }: RouteContext) {
+  const body = await readJsonBody<Partial<OpenPathBody>>(req, {});
+  const requested = String(body.path || "").trim();
+  if (!requested) {
+    json(res, 400, { ok: false, error: "path is required" });
+    return;
+  }
+  try {
+    const action = await openFileInSystem(requested);
+    json(res, 200, { ok: true, path: requested, action });
+  } catch (error) {
+    json(res, 500, { ok: false, error: String(error) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // dispatcher
 // ---------------------------------------------------------------------------
 
 async function dispatch(ctx: RouteContext): Promise<void> {
   if (await handleStaticAsset(ctx)) return;
+
+  if (ctx.url.pathname.startsWith("/api/ai/")) {
+    if (await dispatchAi(ctx.req, ctx.res)) return;
+    json(ctx.res, 404, { error: "ai endpoint not found" });
+    return;
+  }
 
   const { method } = ctx.req;
   const { pathname } = ctx.url;
@@ -365,7 +626,13 @@ async function dispatch(ctx: RouteContext): Promise<void> {
   if (method === "PUT" && pathname.startsWith("/api/annotations/")) return handleUpdateAnnotation(ctx);
   if (method === "DELETE" && pathname.startsWith("/api/annotations/")) return handleDeleteAnnotation(ctx);
   if (method === "POST" && pathname.startsWith("/api/open-file/")) return handleOpenFile(ctx);
+  if (method === "POST" && pathname === "/api/open-path") return handleOpenPath(ctx);
   if (method === "GET" && pathname === "/api/asset") return handleAsset(ctx);
+  if (method === "GET" && pathname === "/api/fs/list") return handleFsList(ctx);
+  // /api/export/target/<key> must be checked before the generic /api/export/<key>
+  // download route so the dispatcher doesn't swallow it.
+  if (method === "GET" && pathname.startsWith("/api/export/target/")) return handleExportTarget(ctx);
+  if (method === "POST" && pathname === "/api/export/write") return handleExportWrite(ctx);
   if (method === "GET" && pathname.startsWith("/api/export/")) return handleExport(ctx);
 
   json(ctx.res, 404, { error: "not found" });
@@ -427,7 +694,7 @@ export async function runServe(
     server.once("error", onError);
     server.listen(port, host, () => {
       server.removeListener("error", onError);
-      console.log(`logue running: http://${host}:${port}`);
+      console.log(`reunion running: http://${host}:${port}`);
       console.log(`source roots:`);
       console.log(`  cursor:      ${roots.cursor}`);
       console.log(`  claude-code: ${roots.claudeCode}`);
