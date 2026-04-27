@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -172,33 +172,97 @@
           </svg>
           Reunion
         </div>
-        <input id="q" placeholder="搜索关键词（支持中英文）" />
+        <input id="q" placeholder="" />
         <select id="repo"></select>
-        <select id="days">
-          <option value="0">全部时间</option>
-          <option value="7">最近7天</option>
-          <option value="30">最近30天</option>
-          <option value="60">最近60天</option>
-          <option value="90">最近90天</option>
-        </select>
-        <button class="primary" id="searchBtn">搜索</button>
-        <button id="reindexBtn">重建索引</button>
+        <select id="days"></select>
+        <button class="primary" id="searchBtn"></button>
+        <button id="reindexBtn"></button>
         <span class="muted" id="status"></span>
       </div>
 
       <div class="layout">
         <div class="left" id="results"></div>
         <div class="right">
-          <div id="detailMeta" class="muted">点击左侧会话查看详情</div>
+          <div id="detailMeta" class="muted"></div>
           <pre id="detail"></pre>
         </div>
       </div>
     </div>
 
     <script>
+      const LANG = (() => {
+        try {
+          const stored = localStorage.getItem("reunion:language");
+          if (stored === "en" || stored === "zh") return stored;
+        } catch {}
+        return (navigator.language || "").startsWith("zh") ? "zh" : "en";
+      })();
+      document.documentElement.lang = LANG === "zh" ? "zh-CN" : "en";
+
+      const I18N = {
+        en: {
+          searchPlaceholder: "Search keywords",
+          allTime: "All time",
+          last7: "Last 7 days",
+          last30: "Last 30 days",
+          last60: "Last 60 days",
+          last90: "Last 90 days",
+          search: "Search",
+          reindex: "Reindex",
+          allRepo: "All Repos",
+          searching: "Searching...",
+          resultCount: (n) => `${n} result(s)`,
+          noResults: "No matching results",
+          openFile: "Open source file",
+          sessionFailed: "Failed to load session",
+          indexing: "Building index...",
+          indexFailed: (e) => `Index failed: ${e}`,
+          indexDone: (n) => `Indexed: ${n} sessions`,
+          openFailed: (e) => `Open failed: ${e}`,
+          opened: "Source file opened",
+          detailHint: "Click a session on the left to view details",
+        },
+        zh: {
+          searchPlaceholder: "搜索关键词（支持中英文）",
+          allTime: "全部时间",
+          last7: "最近7天",
+          last30: "最近30天",
+          last60: "最近60天",
+          last90: "最近90天",
+          search: "搜索",
+          reindex: "重建索引",
+          allRepo: "全部 Repo",
+          searching: "查询中...",
+          resultCount: (n) => `结果 ${n} 条`,
+          noResults: "没有匹配结果",
+          openFile: "打开原文件",
+          sessionFailed: "会话读取失败",
+          indexing: "索引构建中...",
+          indexFailed: (e) => `索引失败：${e}`,
+          indexDone: (n) => `索引完成：${n} sessions`,
+          openFailed: (e) => `打开失败：${e}`,
+          opened: "已打开原文件",
+          detailHint: "点击左侧会话查看详情",
+        },
+      };
+      const t = I18N[LANG];
+
+      // Apply i18n to static DOM
+      document.getElementById("q").placeholder = t.searchPlaceholder;
+      const daysEl = document.getElementById("days");
+      daysEl.innerHTML = "";
+      [[0, t.allTime],[7, t.last7],[30, t.last30],[60, t.last60],[90, t.last90]].forEach(([v, label]) => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = label;
+        daysEl.appendChild(opt);
+      });
+      document.getElementById("searchBtn").textContent = t.search;
+      document.getElementById("reindexBtn").textContent = t.reindex;
+      document.getElementById("detailMeta").textContent = t.detailHint;
+
       const qEl = document.getElementById("q");
       const repoEl = document.getElementById("repo");
-      const daysEl = document.getElementById("days");
       const resultsEl = document.getElementById("results");
       const detailEl = document.getElementById("detail");
       const detailMetaEl = document.getElementById("detailMeta");
@@ -217,7 +281,7 @@
 
         const all = document.createElement("option");
         all.value = "";
-        all.textContent = "全部 Repo";
+        all.textContent = t.allRepo;
         repoEl.appendChild(all);
 
         for (const item of data.repos) {
@@ -229,20 +293,20 @@
       }
 
       async function search() {
-        statusEl.textContent = "查询中...";
+        statusEl.textContent = t.searching;
         const q = encodeURIComponent(qEl.value.trim());
         const repo = encodeURIComponent(repoEl.value);
         const days = encodeURIComponent(daysEl.value || "0");
         const res = await fetch(`/api/search?q=${q}&repo=${repo}&days=${days}&limit=200`);
         const data = await res.json();
         renderResults(data.results || []);
-        statusEl.textContent = `结果 ${data.count || 0} 条`;
+        statusEl.textContent = t.resultCount(data.count || 0);
       }
 
       function renderResults(items) {
         resultsEl.innerHTML = "";
         if (!items.length) {
-          resultsEl.innerHTML = '<p class="muted">没有匹配结果</p>';
+          resultsEl.innerHTML = `<p class="muted">${t.noResults}</p>`;
           return;
         }
 
@@ -257,7 +321,7 @@
             <div class="meta">${item.session_id} · ${fmtTs(item.updated_at)}</div>
             <div class="snippet">${item.snippet || ""}</div>
             <div class="actions">
-              <button class="mini-btn open-file-btn" data-session-key="${item.session_key}">打开原文件</button>
+              <button class="mini-btn open-file-btn" data-session-key="${item.session_key}">${t.openFile}</button>
             </div>
           `;
           card.addEventListener("click", () => openSession(item.session_key));
@@ -274,7 +338,7 @@
         activeSessionKey = sessionKey;
         const res = await fetch(`/api/session/${encodeURIComponent(sessionKey)}`);
         if (!res.ok) {
-          detailMetaEl.textContent = "会话读取失败";
+          detailMetaEl.textContent = t.sessionFailed;
           detailEl.textContent = "";
           return;
         }
@@ -285,14 +349,14 @@
       }
 
       async function reindex() {
-        statusEl.textContent = "索引构建中...";
+        statusEl.textContent = t.indexing;
         const res = await fetch("/api/reindex", { method: "POST" });
         const data = await res.json();
         if (!res.ok || !data.ok) {
-          statusEl.textContent = `索引失败：${data.error || "unknown"}`;
+          statusEl.textContent = t.indexFailed(data.error || "unknown");
           return;
         }
-        statusEl.textContent = `索引完成：${data.stats.sessions_indexed} sessions`;
+        statusEl.textContent = t.indexDone(data.stats.sessions_indexed);
         await loadRepos();
         await search();
       }
@@ -301,10 +365,10 @@
         const res = await fetch(`/api/open-file/${encodeURIComponent(sessionKey)}`, { method: "POST" });
         const data = await res.json();
         if (!res.ok || !data.ok) {
-          statusEl.textContent = `打开失败：${data.error || "unknown"}`;
+          statusEl.textContent = t.openFailed(data.error || "unknown");
           return;
         }
-        statusEl.textContent = "已打开原文件";
+        statusEl.textContent = t.opened;
       }
 
       document.getElementById("searchBtn").addEventListener("click", search);
