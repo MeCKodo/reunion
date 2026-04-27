@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Logue 一键安装脚本（macOS only）
+# Reunion 一键安装脚本（macOS only）
 #
 # 用法（同事拷到终端跑这一行）：
-#   curl -fsSL https://github.com/MeCKodo/Logue/releases/latest/download/install.sh | bash
+#   curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.sh | bash
 #
 # 也支持安装指定版本：
-#   LOGUE_VERSION=v0.1.0 curl -fsSL https://github.com/MeCKodo/Logue/releases/latest/download/install.sh | bash
+#   REUNION_VERSION=v0.1.0 curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.sh | bash
 #
 # 脚本做的事：
 #   1. 检测 Mac 架构（Apple Silicon / Intel）
 #   2. 从 GitHub Releases 下载对应 DMG
-#   3. 挂载、拷贝 Logue.app 到 /Applications
+#   3. 挂载、拷贝 Reunion.app 到 /Applications
 #   4. xattr -cr 清除 quarantine（自动过 Gatekeeper）
 #   5. 卸载 DMG、清理临时文件
 #   6. 提示用户首次启动方式
@@ -38,22 +38,22 @@ err()  { printf "%s✗%s %s\n" "$C_RED" "$C_RESET" "$1" >&2; }
 hint() { printf "  %s%s%s\n" "$C_DIM" "$1" "$C_RESET"; }
 
 # ---------- 配置 ----------
-GITHUB_REPO="${LOGUE_REPO:-MeCKodo/Logue}"
-APP_NAME="Logue"
+GITHUB_REPO="${REUNION_REPO:-MeCKodo/reunion}"
+APP_NAME="Reunion"
 APP_BUNDLE="${APP_NAME}.app"
 INSTALL_DIR="/Applications"
-TMP_DIR="$(mktemp -d -t logue-install)"
+TMP_DIR="$(mktemp -d -t reunion-install)"
 trap 'rm -rf "$TMP_DIR"; [[ -n "${MOUNTED_VOLUME:-}" ]] && hdiutil detach "$MOUNTED_VOLUME" -quiet 2>/dev/null || true' EXIT
 
 # ---------- 前置检查 ----------
-printf "\n%s%sLogue 安装器%s %s(%s)%s\n\n" "$C_BOLD" "$C_CYAN" "$C_RESET" "$C_DIM" "$GITHUB_REPO" "$C_RESET"
+printf "\n%s%sReunion 安装器%s %s(%s)%s\n\n" "$C_BOLD" "$C_CYAN" "$C_RESET" "$C_DIM" "$GITHUB_REPO" "$C_RESET"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   err "本脚本仅支持 macOS（当前系统：$(uname -s)）。"
   exit 1
 fi
 
-# macOS 12+ 检查（Logue 编译时设的最低版本）
+# macOS 12+ 检查（Reunion 编译时设的最低版本）
 MACOS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
 if [[ "$MACOS_MAJOR" -lt 12 ]]; then
   err "需要 macOS 12 (Monterey) 或更新版本。当前：$(sw_vers -productVersion)"
@@ -87,15 +87,15 @@ esac
 step "检测到 ${ARCH_LABEL}"
 
 # ---------- 解析下载 URL ----------
-LOGUE_VERSION="${LOGUE_VERSION:-latest}"
-if [[ "$LOGUE_VERSION" == "latest" ]]; then
+REUNION_VERSION="${REUNION_VERSION:-latest}"
+if [[ "$REUNION_VERSION" == "latest" ]]; then
   REL_URL="https://github.com/${GITHUB_REPO}/releases/latest/download"
 else
-  REL_URL="https://github.com/${GITHUB_REPO}/releases/download/${LOGUE_VERSION}"
+  REL_URL="https://github.com/${GITHUB_REPO}/releases/download/${REUNION_VERSION}"
 fi
 
 # 探测最新版本的实际版本号（用于打印 + 文件名）
-if [[ "$LOGUE_VERSION" == "latest" ]]; then
+if [[ "$REUNION_VERSION" == "latest" ]]; then
   step "查询最新版本..."
   RESOLVED_VERSION="$(curl -fsSL -o /dev/null -w "%{url_effective}" \
     "https://github.com/${GITHUB_REPO}/releases/latest" 2>/dev/null \
@@ -107,11 +107,11 @@ if [[ "$LOGUE_VERSION" == "latest" ]]; then
     RESOLVED_VERSION="latest"
   fi
 else
-  RESOLVED_VERSION="$LOGUE_VERSION"
+  RESOLVED_VERSION="$REUNION_VERSION"
 fi
 
-# DMG 文件名格式：Logue-{version}{suffix}
-# 例如：Logue-0.1.0-arm64.dmg / Logue-0.1.0.dmg
+# DMG 文件名格式：Reunion-{version}{suffix}
+# 例如：Reunion-0.1.0-arm64.dmg / Reunion-0.1.0.dmg
 VERSION_NUM="${RESOLVED_VERSION#v}"
 DMG_NAME="${APP_NAME}-${VERSION_NUM}${DMG_SUFFIX}"
 DMG_URL="${REL_URL}/${DMG_NAME}"
@@ -136,7 +136,7 @@ ok "已下载（${DMG_SIZE}）"
 step "挂载 DMG"
 MOUNT_OUTPUT="$(hdiutil attach "$DMG_PATH" -nobrowse -readonly 2>&1)"
 # hdiutil attach 的 mount table 行格式（用 tab 分隔）：
-#   /dev/disk4s1<TAB>Apple_HFS<TAB>/Volumes/Logue 0.1.0
+#   /dev/disk4s1<TAB>Apple_HFS<TAB>/Volumes/Reunion 0.1.0
 # 取第一行包含 /Volumes/ 的最后一字段，再 trim 前导空格。
 MOUNTED_VOLUME="$(echo "$MOUNT_OUTPUT" | awk -F '\t' '/\/Volumes\// {sub(/^ +/, "", $NF); print $NF; exit}')"
 if [[ -z "$MOUNTED_VOLUME" || ! -d "$MOUNTED_VOLUME" ]]; then
@@ -154,7 +154,7 @@ fi
 
 # ---------- 关闭已运行实例 ----------
 if pgrep -f "${APP_BUNDLE}/Contents/MacOS" >/dev/null 2>&1; then
-  step "检测到 Logue 正在运行，先优雅退出..."
+  step "检测到 Reunion 正在运行，先优雅退出..."
   osascript -e "tell application \"${APP_NAME}\" to quit" >/dev/null 2>&1 || true
   sleep 2
   pkill -f "${APP_BUNDLE}/Contents/MacOS" 2>/dev/null || true

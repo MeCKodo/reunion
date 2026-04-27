@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Logue 发版脚本（你本人用）
+# Reunion 发版脚本（你本人用）
 #
 # 做的事：
 #   1. 检查 git working tree 干净 / gh 已登录 / 在正确分支
@@ -98,8 +98,8 @@ if gh release view "$TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
 fi
 
 # ---------- 构建 ----------
-DMG_ARM64="release/Logue-${NEW_VERSION}-arm64.dmg"
-DMG_X64="release/Logue-${NEW_VERSION}.dmg"
+DMG_ARM64="release/Reunion-${NEW_VERSION}-arm64.dmg"
+DMG_X64="release/Reunion-${NEW_VERSION}.dmg"
 
 if [[ "$SKIP_BUILD" -eq 1 ]]; then
   step "跳过构建（--skip-build）"
@@ -125,9 +125,9 @@ ok "所有上传文件就绪"
 
 # ---------- 生成 Release notes ----------
 PREV_TAG="$(gh release list --repo "$GITHUB_REPO" --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || true)"
-NOTES_FILE="$(mktemp -t logue-release-notes)"
+NOTES_FILE="$(mktemp -t reunion-release-notes)"
 {
-  echo "## Logue ${TAG}"
+  echo "## Reunion ${TAG}"
   echo
   echo "macOS 桌面 App，聚合本地 Cursor / Claude Code / Codex 对话历史。"
   echo
@@ -139,8 +139,8 @@ NOTES_FILE="$(mktemp -t logue-release-notes)"
   echo
   echo "### 下载"
   echo
-  echo "- **Apple Silicon (M1/M2/M3/M4)**: \`Logue-${NEW_VERSION}-arm64.dmg\`"
-  echo "- **Intel**: \`Logue-${NEW_VERSION}.dmg\`"
+  echo "- **Apple Silicon (M1/M2/M3/M4)**: \`Reunion-${NEW_VERSION}-arm64.dmg\`"
+  echo "- **Intel**: \`Reunion-${NEW_VERSION}.dmg\`"
   echo
   echo "### 系统要求"
   echo
@@ -171,7 +171,7 @@ fi
 #      避免一次 create 全部上传时让人误以为卡死。GitHub Releases 单文件 100MB 走国内
 #      网络通常需要 5~7 分钟，正常现象。
 step "创建 GitHub Release ${TAG}（先传小文件）"
-GH_FLAGS=(--repo "$GITHUB_REPO" --title "Logue ${TAG}" --notes-file "$NOTES_FILE")
+GH_FLAGS=(--repo "$GITHUB_REPO" --title "Reunion ${TAG}" --notes-file "$NOTES_FILE")
 if [[ "$DRAFT" -eq 1 ]]; then
   GH_FLAGS+=(--draft)
 fi
@@ -204,8 +204,8 @@ upload_dmg() {
   ok "上传完成（${elapsed}s）"
 }
 
-upload_dmg "$DMG_ARM64" "Logue ${NEW_VERSION} (Apple Silicon)"
-upload_dmg "$DMG_X64"   "Logue ${NEW_VERSION} (Intel)"
+upload_dmg "$DMG_ARM64" "Reunion ${NEW_VERSION} (Apple Silicon)"
+upload_dmg "$DMG_X64"   "Reunion ${NEW_VERSION} (Intel)"
 
 # ---------- 完成 ----------
 RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/tag/${TAG}"

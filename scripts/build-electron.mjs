@@ -36,12 +36,12 @@ async function clean() {
 }
 
 const esmBanner = [
-  "import { createRequire as __logueCreateRequire } from 'node:module';",
-  "import { fileURLToPath as __logueFileURLToPath } from 'node:url';",
-  "import { dirname as __logueDirname } from 'node:path';",
-  "const require = __logueCreateRequire(import.meta.url);",
-  "const __filename = __logueFileURLToPath(import.meta.url);",
-  "const __dirname = __logueDirname(__filename);",
+  "import { createRequire as __reunionCreateRequire } from 'node:module';",
+  "import { fileURLToPath as __reunionFileURLToPath } from 'node:url';",
+  "import { dirname as __reunionDirname } from 'node:path';",
+  "const require = __reunionCreateRequire(import.meta.url);",
+  "const __filename = __reunionFileURLToPath(import.meta.url);",
+  "const __dirname = __reunionDirname(__filename);",
 ].join("\n");
 
 async function bundleElectronMain() {
@@ -62,7 +62,7 @@ async function bundleElectronMain() {
 
 async function copyBootstrap() {
   // bootstrap.cjs MUST stay un-bundled CommonJS so it runs synchronously
-  // and can inject LOGUE_* env vars before main.js is loaded.
+  // and can inject REUNION_* env vars before main.js is loaded.
   await copyFile(
     path.join(projectRoot, "electron", "bootstrap.cjs"),
     path.join(electronOutDir, "bootstrap.cjs")

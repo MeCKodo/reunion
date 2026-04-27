@@ -1,11 +1,11 @@
 {
-  "name": "logue",
-  "productName": "Logue",
-  "version": "0.1.1",
+  "name": "reunion",
+  "productName": "Reunion",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "dist/electron/bootstrap.cjs",
-  "description": "Aggregate, search, read and export local Cursor / Claude Code / Codex agent chats.",
+  "description": "Reunite with every AI conversation. Aggregate, search, read and export local Cursor / Claude Code / Codex agent chats.",
   "author": "MeCKodo",
   "scripts": {
     "index": "tsx src/server.ts index",

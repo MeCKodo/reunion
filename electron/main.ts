@@ -8,7 +8,7 @@ import fs from "node:fs";
 // ---------------------------------------------------------------------------
 //
 // macOS swallows stdout/stderr from GUI .app launches, so we always mirror
-// console output to ~/Library/Logs/Logue/main.log. This makes production
+// console output to ~/Library/Logs/Reunion/main.log. This makes production
 // debugging (and the QA pass) tractable without re-packaging.
 
 const logsDir = (() => {
@@ -19,7 +19,7 @@ const logsDir = (() => {
       process.env.HOME ?? "",
       "Library",
       "Logs",
-      "Logue"
+      "Reunion"
     );
   }
 })();
@@ -64,16 +64,16 @@ console.error = (...args: unknown[]) => {
 };
 
 console.log("main.ts boot", {
-  bootstrapped: process.env.LOGUE_BOOTSTRAPPED === "1",
-  dataDir: process.env.LOGUE_DATA_DIR,
-  frontendDistDir: process.env.LOGUE_FRONTEND_DIST_DIR,
+  bootstrapped: process.env.REUNION_BOOTSTRAPPED === "1",
+  dataDir: process.env.REUNION_DATA_DIR,
+  frontendDistDir: process.env.REUNION_FRONTEND_DIST_DIR,
   logsDir,
   isPackaged: app.isPackaged,
 });
 
-if (!process.env.LOGUE_BOOTSTRAPPED) {
+if (!process.env.REUNION_BOOTSTRAPPED) {
   console.warn(
-    "[logue] WARN: bootstrap.cjs did not run; falling back to defaults"
+    "[reunion] WARN: bootstrap.cjs did not run; falling back to defaults"
   );
 }
 
@@ -82,7 +82,7 @@ try {
   fixPath();
   console.log("fix-path applied", { PATH: process.env.PATH?.slice(0, 200) });
 } catch (error) {
-  console.warn("[logue] fix-path failed:", error);
+  console.warn("[reunion] fix-path failed:", error);
 }
 
 import { runServe } from "../src/http-server.js";
@@ -94,7 +94,7 @@ import {
 
 type ServerHandle = Awaited<ReturnType<typeof runServe>>;
 
-const dataDir = process.env.LOGUE_DATA_DIR ?? "";
+const dataDir = process.env.REUNION_DATA_DIR ?? "";
 
 // ---------------------------------------------------------------------------
 // Server lifecycle
@@ -143,8 +143,8 @@ async function writeRuntimeInfo(): Promise<void> {
         {
           startedAt: new Date().toISOString(),
           serverUrl: `http://127.0.0.1:${serverPort}`,
-          dataDir: process.env.LOGUE_DATA_DIR ?? null,
-          frontendDistDir: process.env.LOGUE_FRONTEND_DIST_DIR ?? null,
+          dataDir: process.env.REUNION_DATA_DIR ?? null,
+          frontendDistDir: process.env.REUNION_FRONTEND_DIST_DIR ?? null,
           version: app.getVersion(),
         },
         null,
@@ -152,7 +152,7 @@ async function writeRuntimeInfo(): Promise<void> {
       )
     );
   } catch (error) {
-    console.warn("[logue] failed to write runtime.json:", error);
+    console.warn("[reunion] failed to write runtime.json:", error);
   }
 }
 
@@ -179,7 +179,7 @@ function createWindow() {
     height: 860,
     minWidth: 960,
     minHeight: 600,
-    title: "Logue",
+    title: "Reunion",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     backgroundColor: "#0b0b0f",
     webPreferences: {
@@ -286,7 +286,7 @@ function buildMenu() {
         {
           label: "Open Project Repository",
           click: () => {
-            shell.openExternal("https://github.com/MeCKodo/Logue");
+            shell.openExternal("https://github.com/MeCKodo/reunion");
           },
         },
       ],
@@ -300,12 +300,12 @@ function buildMenu() {
 // App lifecycle
 // ---------------------------------------------------------------------------
 
-app.setName("Logue");
+app.setName("Reunion");
 app.setAboutPanelOptions({
-  applicationName: "Logue",
+  applicationName: "Reunion",
   applicationVersion: app.getVersion(),
   copyright: "MIT License",
-  website: "https://github.com/MeCKodo/Logue",
+  website: "https://github.com/MeCKodo/reunion",
 });
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -327,7 +327,7 @@ if (!gotSingleInstanceLock) {
     } catch (error) {
       console.error("failed to start backend:", error);
       dialog.showErrorBox(
-        "Logue",
+        "Reunion",
         `后端服务启动失败:\n${(error as Error).message ?? String(error)}`
       );
       app.quit();

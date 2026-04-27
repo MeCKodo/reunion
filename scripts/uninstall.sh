@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Logue 一键卸载脚本（macOS only）
+# Reunion 一键卸载脚本（macOS only）
 #
 # 用法：
-#   curl -fsSL https://github.com/MeCKodo/Logue/releases/latest/download/uninstall.sh | bash
+#   curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/uninstall.sh | bash
 #
-# 默认：删除 /Applications/Logue.app
+# 默认：删除 /Applications/Reunion.app
 # 可选：传 --purge 一并删除数据 + 日志
 
 set -euo pipefail
@@ -26,7 +26,7 @@ ok()   { printf "%s✓%s %s\n" "$C_GREEN" "$C_RESET" "$1"; }
 warn() { printf "%s!%s %s\n" "$C_YELLOW" "$C_RESET" "$1"; }
 err()  { printf "%s✗%s %s\n" "$C_RED" "$C_RESET" "$1" >&2; }
 
-APP_NAME="Logue"
+APP_NAME="Reunion"
 APP_BUNDLE="${APP_NAME}.app"
 APP_PATH="/Applications/${APP_BUNDLE}"
 DATA_DIR="${HOME}/Library/Application Support/${APP_NAME}"
@@ -44,10 +44,10 @@ for arg in "$@"; do
   esac
 done
 
-printf "\n%s%sLogue 卸载器%s\n\n" "$C_BOLD" "$C_RED" "$C_RESET"
+printf "\n%s%sReunion 卸载器%s\n\n" "$C_BOLD" "$C_RED" "$C_RESET"
 
 if pgrep -f "${APP_BUNDLE}/Contents/MacOS" >/dev/null 2>&1; then
-  step "Logue 正在运行，先优雅退出..."
+  step "${APP_BUNDLE} 正在运行，先优雅退出..."
   osascript -e "tell application \"${APP_NAME}\" to quit" >/dev/null 2>&1 || true
   sleep 2
   pkill -f "${APP_BUNDLE}/Contents/MacOS" 2>/dev/null || true
@@ -62,7 +62,7 @@ if [[ -d "$APP_PATH" ]]; then
   }
   ok "App 已删除"
 else
-  warn "未找到 ${APP_PATH}（已经卸载？）"
+  warn "未找到 ${APP_PATH}（可能已经卸载？）"
 fi
 
 if [[ "$PURGE_DATA" -eq 1 ]]; then
@@ -74,13 +74,21 @@ if [[ "$PURGE_DATA" -eq 1 ]]; then
     fi
   done
 else
-  if [[ -d "$DATA_DIR" || -d "$LOG_DIR" ]]; then
+  remaining=()
+  for d in "$DATA_DIR" "$LOG_DIR"; do
+    [[ -d "$d" ]] && remaining+=("$d")
+  done
+  if [[ ${#remaining[@]} -gt 0 ]]; then
     printf "\n%s保留了你的数据和日志：%s\n" "$C_DIM" "$C_RESET"
-    [[ -d "$DATA_DIR" ]] && printf "  %s%s\n" "$C_DIM" "$DATA_DIR"
-    [[ -d "$LOG_DIR" ]] && printf "  %s%s\n" "$C_DIM" "$LOG_DIR"
-    printf "%s\n" "$C_RESET"
-    printf "%s想一并删除？跑：%s\n" "$C_DIM" "$C_RESET"
-    printf "  rm -rf %q %q\n" "$DATA_DIR" "$LOG_DIR"
+    for d in "${remaining[@]}"; do
+      printf "  %s%s%s\n" "$C_DIM" "$d" "$C_RESET"
+    done
+    printf "\n%s想一并删除？跑：%s\n" "$C_DIM" "$C_RESET"
+    printf "  rm -rf"
+    for d in "${remaining[@]}"; do
+      printf " %q" "$d"
+    done
+    printf "\n"
   fi
 fi
 

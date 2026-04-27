@@ -287,7 +287,7 @@ def run_server(host: str, port: int, source_root: Path):
 
     AppHandler.source_root = source_root
     server = ThreadingHTTPServer((host, port), AppHandler)
-    print(f"logue running: http://{host}:{port}")
+    print(f"reunion running: http://{host}:{port}")
     print(f"source_root: {source_root}")
     server.serve_forever()
 
