@@ -3,6 +3,38 @@ import { parseTranscript } from "./transcript";
 import { projectAnnotation } from "./annotations";
 import type { IndexData, ParsedSegment, Session, SessionAnnotation } from "./types";
 
+// ---------------------------------------------------------------------------
+// Lowercase-haystack caches.
+//
+// The hot path used to call `decodeEntities(seg.text).toLowerCase()` for every
+// segment on every search — for a 35k-segment / ~20MB index that's ~50ms of
+// pure string churn per keystroke. We cache the post-decode lowercase form
+// keyed by the original Session/segment object so subsequent searches reuse
+// the work.
+//
+// WeakMap means: as soon as buildIndex replaces a Session (changed mtime, etc),
+// the old cache entries become eligible for GC automatically — no manual
+// invalidation needed.
+// ---------------------------------------------------------------------------
+const sessionContentLowerCache = new WeakMap<Session, string>();
+const segmentTextLowerCache = new WeakMap<ParsedSegment, string>();
+
+function getSessionContentLower(session: Session): string {
+  const cached = sessionContentLowerCache.get(session);
+  if (cached !== undefined) return cached;
+  const lower = decodeEntities(session.content).toLowerCase();
+  sessionContentLowerCache.set(session, lower);
+  return lower;
+}
+
+function getSegmentTextLower(segment: ParsedSegment): string {
+  const cached = segmentTextLowerCache.get(segment);
+  if (cached !== undefined) return cached;
+  const lower = decodeEntities(segment.text).toLowerCase();
+  segmentTextLowerCache.set(segment, lower);
+  return lower;
+}
+
 function highlightWithTokens(text: string, tokens: string[]): string {
   if (!tokens.length) return escapeHtml(text);
   const escapedTokens = Array.from(new Set(tokens.map((token) => token.trim()).filter(Boolean)))
@@ -13,8 +45,23 @@ function highlightWithTokens(text: string, tokens: string[]): string {
   return escapeHtml(text).replace(regex, '<mark class="hit-mark">$1</mark>');
 }
 
-function buildSegmentPreview(text: string, tokens: string[]): string {
-  const plain = decodeEntities(text).replace(/\s+/g, " ").trim();
+// Cache decoded+collapsed plain text per segment. The output is independent
+// of the query (truncation/highlight is layered on top of `plain`), so the
+// heavy `decodeEntities + collapse-whitespace` work can be reused across
+// keystrokes for any segment that keeps coming back as a top hit. Memory
+// is bounded by total segments and entries are freed automatically when a
+// Session is replaced (WeakMap key).
+const segmentPlainCache = new WeakMap<ParsedSegment, string>();
+function getSegmentPlain(segment: ParsedSegment): string {
+  const cached = segmentPlainCache.get(segment);
+  if (cached !== undefined) return cached;
+  const plain = decodeEntities(segment.text).replace(/\s+/g, " ").trim();
+  segmentPlainCache.set(segment, plain);
+  return plain;
+}
+
+function buildSegmentPreviewCached(segment: ParsedSegment, tokens: string[]): string {
+  const plain = getSegmentPlain(segment);
   if (!plain) return "";
   const normalized = plain.toLowerCase();
   let hitIndex = -1;
@@ -119,37 +166,89 @@ export function searchSessions(
       );
   }
 
-  const ranked = candidates
-    .map((session) => {
-      const segments = ensureSegments(session.segments, session.content, session.startedAt, session.updatedAt);
-      const hits = segments
-        .filter((segment) => {
-          const haystack = decodeEntities(segment.text).toLowerCase();
-          return tokens.every((token) => haystack.includes(token));
-        })
-        .map((segment) => ({
-          segment_index: segment.index,
-          role: segment.role,
-          ts: segment.ts,
-          preview: buildSegmentPreview(segment.text, tokens),
-        }));
-      return { session, hits };
-    })
-    .filter((item) => item.hits.length > 0)
-    .sort((a, b) => {
-      if (b.hits.length !== a.hits.length) return b.hits.length - a.hits.length;
-      return b.session.updatedAt - a.session.updatedAt;
-    });
+  // ---------------------------------------------------------------------
+  // Two-phase matching:
+  //   Phase 1 — coarse session-level filter on cached lowercase `content`.
+  //             Cheap `String.includes` knocks out the long tail (typically
+  //             >90% of sessions for a focused query) without touching any
+  //             segments. The longest token is checked first so we bail
+  //             early on the most selective term.
+  //   Phase 2 — precise per-segment scan for survivors. Segment lowercase
+  //             forms are also cached, so re-typing a longer query reuses
+  //             everything from the previous search.
+  //
+  // Sort + slice happen before we build any HTML preview, so high-frequency
+  // queries like "a" don't pay 25k preview escapes only to throw 24700 away.
+  // ---------------------------------------------------------------------
+  const tokensByLength = [...tokens].sort((a, b) => b.length - a.length);
 
-  return ranked
-    .slice(0, safeLimit)
-    .map(({ session, hits }) =>
-      serializeSession(
-        session,
-        hits[0]?.preview || buildSnippet(session.content, normalizedQuery),
-        hits.length,
-        hits.slice(0, 5),
-        annotations
-      )
+  type Hit = {
+    segment: ParsedSegment;
+  };
+
+  type Ranked = {
+    session: Session;
+    matchCount: number;
+    topHits: Hit[];
+  };
+
+  const ranked: Ranked[] = [];
+
+  for (const session of candidates) {
+    const sessionLower = getSessionContentLower(session);
+    let sessionMatches = true;
+    for (const token of tokensByLength) {
+      if (!sessionLower.includes(token)) {
+        sessionMatches = false;
+        break;
+      }
+    }
+    if (!sessionMatches) continue;
+
+    const segments = ensureSegments(
+      session.segments,
+      session.content,
+      session.startedAt,
+      session.updatedAt
     );
+
+    let matchCount = 0;
+    const topHits: Hit[] = [];
+    for (const segment of segments) {
+      const haystack = getSegmentTextLower(segment);
+      let allMatch = true;
+      for (const token of tokensByLength) {
+        if (!haystack.includes(token)) {
+          allMatch = false;
+          break;
+        }
+      }
+      if (!allMatch) continue;
+      matchCount += 1;
+      if (topHits.length < 5) {
+        topHits.push({ segment });
+      }
+    }
+
+    if (matchCount === 0) continue;
+    ranked.push({ session, matchCount, topHits });
+  }
+
+  ranked.sort((a, b) => {
+    if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+    return b.session.updatedAt - a.session.updatedAt;
+  });
+
+  const top = ranked.slice(0, safeLimit);
+
+  return top.map(({ session, matchCount, topHits }) => {
+    const messageHits = topHits.map(({ segment }) => ({
+      segment_index: segment.index,
+      role: segment.role,
+      ts: segment.ts,
+      preview: buildSegmentPreviewCached(segment, tokens),
+    }));
+    const snippet = messageHits[0]?.preview || buildSnippet(session.content, normalizedQuery);
+    return serializeSession(session, snippet, matchCount, messageHits, annotations);
+  });
 }

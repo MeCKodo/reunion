@@ -102,14 +102,14 @@ ${workflow.length ? workflow.map((line, index) => `${index + 1}. ${line.replace(
 `;
 }
 
-function stripCodeFence(text: string): string {
+export function stripCodeFence(text: string): string {
   return text
     .replace(/^```(?:markdown|md)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
 }
 
-function buildSmartPrompt(session: Session, kind: ExportKind, fallbackMarkdown: string): string {
+export function buildSmartPrompt(session: Session, kind: ExportKind, fallbackMarkdown: string): string {
   const segments = ensureSegments(session);
   const compactTranscript = segments
     .slice(0, 24)
@@ -144,7 +144,7 @@ function buildSmartPrompt(session: Session, kind: ExportKind, fallbackMarkdown: 
   ].join("\n");
 }
 
-function isValidSmartMarkdown(kind: ExportKind, markdown: string): boolean {
+export function isValidSmartMarkdown(kind: ExportKind, markdown: string): boolean {
   const text = markdown.toLowerCase();
   if (kind === "skill") {
     return (
