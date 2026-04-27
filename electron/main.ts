@@ -213,6 +213,10 @@ function createWindow() {
 // Menu
 // ---------------------------------------------------------------------------
 
+const isZh = (() => {
+  try { return app.getLocale().startsWith("zh"); } catch { return false; }
+})();
+
 function buildMenu() {
   const isMac = process.platform === "darwin";
 
@@ -236,7 +240,7 @@ function buildMenu() {
         ]
       : []),
     {
-      label: "Edit",
+      label: isZh ? "编辑" : "Edit",
       submenu: [
         { role: "undo" },
         { role: "redo" },
@@ -248,7 +252,7 @@ function buildMenu() {
       ],
     },
     {
-      label: "View",
+      label: isZh ? "视图" : "View",
       submenu: [
         { role: "reload" },
         { role: "forceReload" },
@@ -262,7 +266,7 @@ function buildMenu() {
       ],
     },
     {
-      label: "Window",
+      label: isZh ? "窗口" : "Window",
       submenu: [
         { role: "minimize" },
         { role: "zoom" },
@@ -275,16 +279,16 @@ function buildMenu() {
       ],
     },
     {
-      label: "Help",
+      label: isZh ? "帮助" : "Help",
       submenu: [
         {
-          label: "Open Data Folder",
+          label: isZh ? "打开数据目录" : "Open Data Folder",
           click: () => {
             shell.openPath(dataDir);
           },
         },
         {
-          label: "Open Project Repository",
+          label: isZh ? "打开项目仓库" : "Open Project Repository",
           click: () => {
             shell.openExternal("https://github.com/MeCKodo/reunion");
           },
@@ -328,7 +332,9 @@ if (!gotSingleInstanceLock) {
       console.error("failed to start backend:", error);
       dialog.showErrorBox(
         "Reunion",
-        `后端服务启动失败:\n${(error as Error).message ?? String(error)}`
+        isZh
+          ? `后端服务启动失败:\n${(error as Error).message ?? String(error)}`
+          : `Failed to start backend:\n${(error as Error).message ?? String(error)}`
       );
       app.quit();
       return;
