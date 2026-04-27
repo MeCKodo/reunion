@@ -41,6 +41,13 @@ import { generateExportMarkdown } from "./export";
 import { dispatchAi } from "./ai/http-handlers";
 import { resolveRepoTarget, setRepoMapping } from "./repo-target";
 import {
+  createExportTask,
+  getTask,
+  listTasks,
+  streamTaskToSse,
+  type CreateExportTaskBody,
+} from "./tasks";
+import {
   listBookmarks,
   listDirectory,
   resolveBrowsePath,
@@ -601,6 +608,44 @@ async function handleOpenPath({ req, res }: RouteContext) {
 }
 
 // ---------------------------------------------------------------------------
+// task center
+// ---------------------------------------------------------------------------
+
+async function handleCreateTask({ req, res }: RouteContext) {
+  const body = await readJsonBody<Partial<CreateExportTaskBody>>(req, {});
+  const { task, error, httpStatus } = await createExportTask(body as CreateExportTaskBody);
+  if (error) {
+    json(res, httpStatus || 400, { ok: false, error });
+    return;
+  }
+  json(res, 201, { ok: true, taskId: task.id, label: task.label });
+}
+
+function handleListTasks({ res }: RouteContext) {
+  json(res, 200, { ok: true, tasks: listTasks() });
+}
+
+function handleTaskStream({ res, url }: RouteContext) {
+  const match = url.pathname.match(/^\/api\/tasks\/([^/]+)\/stream$/);
+  const taskId = match?.[1] || "";
+  if (!taskId) {
+    json(res, 400, { ok: false, error: "missing taskId" });
+    return;
+  }
+  streamTaskToSse(taskId, res);
+}
+
+function handleGetTask({ res, url }: RouteContext) {
+  const taskId = url.pathname.replace("/api/tasks/", "");
+  const task = getTask(taskId);
+  if (!task) {
+    json(res, 404, { ok: false, error: "task not found" });
+    return;
+  }
+  json(res, 200, { ok: true, task });
+}
+
+// ---------------------------------------------------------------------------
 // dispatcher
 // ---------------------------------------------------------------------------
 
@@ -629,6 +674,11 @@ async function dispatch(ctx: RouteContext): Promise<void> {
   if (method === "POST" && pathname === "/api/open-path") return handleOpenPath(ctx);
   if (method === "GET" && pathname === "/api/asset") return handleAsset(ctx);
   if (method === "GET" && pathname === "/api/fs/list") return handleFsList(ctx);
+  // Task center routes
+  if (method === "POST" && pathname === "/api/tasks") return handleCreateTask(ctx);
+  if (method === "GET" && pathname === "/api/tasks") return handleListTasks(ctx);
+  if (method === "GET" && pathname.match(/^\/api\/tasks\/[^/]+\/stream$/)) return handleTaskStream(ctx);
+  if (method === "GET" && pathname.match(/^\/api\/tasks\/[^/]+$/) && !pathname.includes("/stream")) return handleGetTask(ctx);
   // /api/export/target/<key> must be checked before the generic /api/export/<key>
   // download route so the dispatcher doesn't swallow it.
   if (method === "GET" && pathname.startsWith("/api/export/target/")) return handleExportTarget(ctx);

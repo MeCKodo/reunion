@@ -14,12 +14,29 @@ export type SearchParams = {
   repo: string;
   source?: SourceFilter;
   limit?: number;
+  /**
+   * Optional abort signal so the caller can cancel an in-flight search when
+   * the user keeps typing — keeps the UI responsive and avoids out-of-order
+   * results overwriting newer ones.
+   */
+  signal?: AbortSignal;
 };
 
 export type SearchResponse = {
   results: SearchResult[];
   count: number;
 };
+
+/**
+ * Distinct error subclass so callers can `instanceof` check for "user
+ * superseded this request" vs. real failures and skip noisy toasts.
+ */
+export class SearchAbortedError extends Error {
+  constructor() {
+    super("search aborted");
+    this.name = "SearchAbortedError";
+  }
+}
 
 export async function fetchSearch(params: SearchParams): Promise<SearchResponse> {
   const u = new URL("/api/search", window.location.origin);
@@ -31,7 +48,17 @@ export async function fetchSearch(params: SearchParams): Promise<SearchResponse>
   }
   u.searchParams.set("limit", String(params.limit ?? 300));
 
-  const res = await fetch(u.toString());
+  let res: Response;
+  try {
+    res = await fetch(u.toString(), { signal: params.signal });
+  } catch (error) {
+    // DOMException name "AbortError" is what Fetch surfaces when the signal
+    // fires; normalize to our typed error.
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new SearchAbortedError();
+    }
+    throw error;
+  }
   if (!res.ok) throw new Error(`Search failed: HTTP ${res.status}`);
   const data = await res.json();
   return {
@@ -329,6 +356,106 @@ export async function postOpenPath(
     throw new Error(data.error || `Open failed: HTTP ${res.status}`);
   }
   return { ok: true, action: (data.action as "opened" | "revealed") || "opened" };
+}
+
+// ---------------------------------------------------------------------------
+// Task center
+// ---------------------------------------------------------------------------
+
+export type TaskStatus = "pending" | "running" | "done" | "failed";
+
+export interface TaskProgress {
+  phase: string;
+  detail?: string;
+  generatedChars?: number;
+  elapsedSec?: number;
+}
+
+export interface TaskResult {
+  absolutePath: string;
+  relativePath: string;
+  targetDir: string;
+  mode: string;
+  warning?: string;
+  overwritten: boolean;
+  bytes: number;
+}
+
+export interface TaskSnapshot {
+  id: string;
+  type: string;
+  status: TaskStatus;
+  label: string;
+  createdAt: number;
+  progress?: TaskProgress;
+  result?: TaskResult;
+  error?: string;
+}
+
+export interface CreateTaskRequest {
+  sessionKey: string;
+  kind: ExportKind;
+  targetDir: string;
+  relativePath?: string;
+  overwrite?: boolean;
+  rememberMapping?: boolean;
+  provider?: ExportProvider;
+  accountId?: string;
+}
+
+export async function createTask(
+  body: CreateTaskRequest
+): Promise<{ taskId: string; label: string }> {
+  const res = await fetch("/api/tasks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "smart", ...body }),
+  });
+  const data = (await res.json()) as {
+    ok?: boolean;
+    taskId?: string;
+    label?: string;
+    error?: string;
+  };
+  if (!res.ok || !data.ok) {
+    const err = new Error(data.error || `Create task failed: HTTP ${res.status}`) as Error & {
+      code?: string;
+    };
+    if (res.status === 409) err.code = "EEXIST";
+    throw err;
+  }
+  return { taskId: data.taskId!, label: data.label! };
+}
+
+export async function fetchTasks(): Promise<TaskSnapshot[]> {
+  const res = await fetch("/api/tasks");
+  if (!res.ok) return [];
+  const data = (await res.json()) as { tasks?: TaskSnapshot[] };
+  return data.tasks || [];
+}
+
+export type TaskStreamEvent =
+  | { type: "snapshot"; task: TaskSnapshot }
+  | { type: "error"; error: string };
+
+export async function* streamTask(
+  taskId: string,
+  signal?: AbortSignal
+): AsyncIterable<TaskStreamEvent> {
+  const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/stream`, {
+    signal,
+  });
+  for await (const frame of parseSseStream(res, signal)) {
+    if (frame.event === "snapshot") {
+      yield { type: "snapshot", task: frame.data as TaskSnapshot };
+    } else if (frame.event === "error") {
+      const data = frame.data as { error?: string };
+      yield { type: "error", error: data?.error || "Task stream error" };
+      return;
+    } else if (frame.event === "end") {
+      return;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

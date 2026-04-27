@@ -1,9 +1,12 @@
 import * as React from "react";
-import { RefreshCw, Settings as SettingsIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ListTodo, RefreshCw, Settings as SettingsIcon } from "lucide-react";
+import i18n from "@/i18n";
 import { SessionListSkeleton } from "@/components/shared/Skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { useElectronDrag } from "@/hooks/useElectronDrag";
+import { useTaskCenter } from "@/lib/task-center";
 import { cn } from "@/lib/utils";
 import type {
   RepoGroup,
@@ -80,6 +83,7 @@ function Sidebar(props: SidebarProps) {
     ...searchProps
   } = props;
 
+  const { t } = useTranslation();
   const hasFilters = onlyStarred || selectedTags.length > 0;
   const showSkeleton = firstLoad && loading;
   const showEmpty = !showSkeleton && groupedResults.length === 0;
@@ -90,6 +94,7 @@ function Sidebar(props: SidebarProps) {
   const { enabled: isMacElectron, dragStyle: headerDragStyle, noDragStyle: headerNoDragStyle } =
     useElectronDrag();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const { activeCount, toggleSidebar } = useTaskCenter();
 
   return (
     <aside
@@ -113,21 +118,51 @@ function Sidebar(props: SidebarProps) {
             Reunion
           </div>
           <div className="flex items-center gap-0.5" style={headerNoDragStyle}>
-            <Tooltip text="AI providers, accounts, and defaults">
+            <Tooltip text={t("language.label")}>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = i18n.language === "zh" ? "en" : "zh";
+                  i18n.changeLanguage(next);
+                }}
+                className="inline-flex h-7 items-center justify-center rounded-md px-1.5 font-mono text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+              >
+                {i18n.language === "zh" ? "EN" : "中文"}
+              </button>
+            </Tooltip>
+            <Tooltip text={t("sidebar.settingsTooltip")}>
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
-                aria-label="Open Settings"
+                aria-label={t("sidebar.openSettings")}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
               >
                 <SettingsIcon className="h-3.5 w-3.5" />
               </button>
             </Tooltip>
-            <Tooltip text="Rescan all workspaces for new conversations">
+            <Tooltip text="任务中心">
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label="任务中心"
+                className={cn(
+                  "relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+                  activeCount > 0 && "text-primary"
+                )}
+              >
+                <ListTodo className="h-3.5 w-3.5" />
+                {activeCount > 0 ? (
+                  <span className="absolute -top-0.5 -right-0.5 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold text-primary-foreground">
+                    {activeCount}
+                  </span>
+                ) : null}
+              </button>
+            </Tooltip>
+            <Tooltip text={t("sidebar.reindexTooltip")}>
               <button
                 type="button"
                 onClick={onReindex}
-                aria-label="Reindex"
+                aria-label={t("sidebar.reindex")}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -155,14 +190,14 @@ function Sidebar(props: SidebarProps) {
         />
         <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
           <span>
-            Threads ·{" "}
+            {t("sidebar.threads")} ·{" "}
             <span className="text-foreground">{filteredCount}</span>
             {filteredCount !== totalCount ? (
               <span className="opacity-60"> / {totalCount}</span>
             ) : null}
           </span>
           {hasFilters || hasQuery ? (
-            <span className="text-accent">filtered</span>
+            <span className="text-accent">{t("sidebar.filtered")}</span>
           ) : null}
         </div>
       </div>
@@ -172,12 +207,12 @@ function Sidebar(props: SidebarProps) {
           <SessionListSkeleton />
         ) : showEmpty ? (
           <EmptyState
-            eyebrow="nothing here"
-            title={hasQuery || hasFilters ? "No matches" : "No sessions yet"}
+            eyebrow={t("sidebar.nothingHere")}
+            title={hasQuery || hasFilters ? t("sidebar.noMatches") : t("sidebar.noSessionsYet")}
             description={
               hasQuery || hasFilters
-                ? "Try broadening your query or clearing filters."
-                : "Run reindex from the header once your Cursor workspace has conversations."
+                ? t("sidebar.noMatchesDesc")
+                : t("sidebar.noSessionsDesc")
             }
             className="py-16"
           />
@@ -190,7 +225,7 @@ function Sidebar(props: SidebarProps) {
                   key={groupKey}
                   group={group}
                   collapsed={collapsedRepos[groupKey] ?? false}
-                  onToggle={() => onToggleRepo(groupKey)}
+                  onToggle={onToggleRepo}
                   activeSessionKey={activeSessionKey}
                   hasQuery={hasQuery}
                   onOpenSession={onOpenSession}
