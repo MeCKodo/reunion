@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reunion · Compact mark
+  Style: Layered Prism — hero-cell ink lockup geometry
+  ViewBox keeps coordinates 1:1 with the source compact lockup
+  in logo-capability-suite.html › hero-cell ink, so the staircase
+  L-shapes and ember overhang stay visually identical.
+  Layer order:
+    1 outer card  · #fbfaf7 (paper plate)
+    2 shoulder    · #5a4f7b (purple mist L, top-right)
+    3 ember       · #e08454 (twilight ember L, bottom-left, overhangs card)
+    4 inner ink   · #23202d (deep ink L, central focal block)
+    5 focal eye   · #fbfaf7 (paper dot reverses on inner ink)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 74 96" width="74" height="96">
+  <rect x="4" y="15" width="66" height="66" rx="16" fill="#fbfaf7"/>
+  <path d="M22 30h24c7 0 12 5 12 12v23H34c-7 0-12-5-12-12V30Z" fill="#5a4f7b"/>
+  <path d="M14 39h24c7 0 12 5 12 12v14H26c-7 0-12-5-12-12V39Z" fill="#e08454"/>
+  <path d="M27 34h17c6 0 10 4 10 10v17H37c-6 0-10-4-10-10V34Z" fill="#23202d"/>
+  <circle cx="41" cy="48" r="5" fill="#fbfaf7"/>
+</svg>

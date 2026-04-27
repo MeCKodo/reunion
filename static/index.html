@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Logue</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 74 74'><rect x='0' y='0' width='66' height='66' rx='16' fill='%23fbfaf7'/><path d='M18 15h24c7 0 12 5 12 12v23H30c-7 0-12-5-12-12V15Z' fill='%235a4f7b'/><path d='M10 24h24c7 0 12 5 12 12v14H22c-7 0-12-5-12-12V24Z' fill='%23e08454'/><path d='M23 19h17c6 0 10 4 10 10v17H33c-6 0-10-4-10-10V19Z' fill='%2323202d'/><circle cx='37' cy='33' r='5' fill='%23fbfaf7'/></svg>"
+    />
+    <title>Reunion</title>
     <style>
       :root {
         --bg: #0c1018;
@@ -140,18 +145,33 @@
       }
       .muted { color: var(--muted); }
       .logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         font-size: 13px;
         font-weight: 700;
         letter-spacing: 0.2px;
         margin-right: 10px;
-        color: #cbe0ff;
+        color: #f3ebde;
+      }
+      .logo svg {
+        flex-shrink: 0;
       }
     </style>
   </head>
   <body>
     <div class="wrap">
       <div class="toolbar">
-        <div class="logo">Logue</div>
+        <div class="logo">
+          <svg width="20" height="20" viewBox="0 0 74 74" xmlns="http://www.w3.org/2000/svg" aria-label="Reunion">
+            <rect x="0" y="0" width="66" height="66" rx="16" fill="#fbfaf7"/>
+            <path d="M18 15h24c7 0 12 5 12 12v23H30c-7 0-12-5-12-12V15Z" fill="#5a4f7b"/>
+            <path d="M10 24h24c7 0 12 5 12 12v14H22c-7 0-12-5-12-12V24Z" fill="#e08454"/>
+            <path d="M23 19h17c6 0 10 4 10 10v17H33c-6 0-10-4-10-10V19Z" fill="#23202d"/>
+            <circle cx="37" cy="33" r="5" fill="#fbfaf7"/>
+          </svg>
+          Reunion
+        </div>
         <input id="q" placeholder="搜索关键词（支持中英文）" />
         <select id="repo"></select>
         <select id="days">

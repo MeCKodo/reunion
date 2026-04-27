@@ -1,5 +1,5 @@
 import * as React from "react";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { SessionListSkeleton } from "@/components/shared/Skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
@@ -124,8 +124,8 @@ function Sidebar(props: SidebarProps) {
           )}
         >
           <div className="flex items-center gap-2 font-serif text-[17px] font-semibold tracking-tight">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Logue
+            <ReunionMark className="h-[18px] w-[18px]" />
+            Reunion
           </div>
           <Tooltip text="Rescan all workspaces for new conversations">
             <button
@@ -207,6 +207,23 @@ function Sidebar(props: SidebarProps) {
         )}
       </div>
     </aside>
+  );
+}
+
+function ReunionMark({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 74 74"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-label="Reunion"
+      className={className}
+    >
+      <rect x="0" y="0" width="66" height="66" rx="16" fill="#fbfaf7" />
+      <path d="M18 15h24c7 0 12 5 12 12v23H30c-7 0-12-5-12-12V15Z" fill="#5a4f7b" />
+      <path d="M10 24h24c7 0 12 5 12 12v14H22c-7 0-12-5-12-12V24Z" fill="#e08454" />
+      <path d="M23 19h17c6 0 10 4 10 10v17H33c-6 0-10-4-10-10V19Z" fill="#23202d" />
+      <circle cx="37" cy="33" r="5" fill="#fbfaf7" />
+    </svg>
   );
 }
 

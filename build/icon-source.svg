@@ -1,55 +1,56 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<!--
+  Reunion · macOS App Icon (1024×1024)
+  Style: Layered Prism — hero-cell ink lockup geometry
+  The L-shaped staircase inside is preserved from
+  logo-capability-suite.html › hero-cell ink.
+
+  Tokens (sRGB hex, baked from oklch for rsvg/iconutil compatibility):
+    plate-glow      = oklch(56% 0.14 35)   — #a4623b (warm shoulder)
+    plate-mid       = oklch(34% 0.08 290)  — #3a2f55 (twilight purple)
+    plate-edge      = oklch(22% 0.04 290)  — #221c34 (night ink)
+    layer-card      = #fbfaf7 (paper card)
+    layer-shoulder  = #5a4f7b (purple mist)
+    layer-ember     = #e08454 (twilight ember)
+    layer-ink       = #23202d (inner deep ink)
+    focal-eye       = #fbfaf7 (paper dot)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#1e1b4b"/>
+    <radialGradient id="plate" cx="32%" cy="24%" r="92%">
+      <stop offset="0%"  stop-color="#a4623b"/>
+      <stop offset="55%" stop-color="#3a2f55"/>
+      <stop offset="100%" stop-color="#221c34"/>
+    </radialGradient>
+
+    <linearGradient id="bevelHi" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="bubbleA" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#a5b4fc"/>
-      <stop offset="100%" stop-color="#6366f1"/>
-    </linearGradient>
-    <linearGradient id="bubbleB" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f9a8d4"/>
-      <stop offset="100%" stop-color="#ec4899"/>
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="22" result="blur"/>
+
+    <filter id="layerShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="12"/>
+      <feOffset dx="0" dy="14" result="off"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.42"/></feComponentTransfer>
       <feMerge>
-        <feMergeNode in="blur"/>
+        <feMergeNode/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
   </defs>
 
-  <rect x="0" y="0" width="1024" height="1024" rx="200" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="url(#plate)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="url(#bevelHi)"/>
 
-  <!-- decorative grid -->
-  <g opacity="0.08" stroke="#ffffff" stroke-width="1">
-    <line x1="0" y1="256" x2="1024" y2="256"/>
-    <line x1="0" y1="512" x2="1024" y2="512"/>
-    <line x1="0" y1="768" x2="1024" y2="768"/>
-    <line x1="256" y1="0" x2="256" y2="1024"/>
-    <line x1="512" y1="0" x2="512" y2="1024"/>
-    <line x1="768" y1="0" x2="768" y2="1024"/>
-  </g>
-
-  <!-- assistant bubble -->
-  <g filter="url(#glow)">
-    <path d="M180 320 Q180 240 260 240 L640 240 Q720 240 720 320 L720 480 Q720 560 640 560 L380 560 L260 660 L260 560 Q180 560 180 480 Z"
-          fill="url(#bubbleA)" />
-  </g>
-
-  <!-- user bubble overlay -->
-  <g filter="url(#glow)">
-    <path d="M380 540 Q380 460 460 460 L820 460 Q900 460 900 540 L900 700 Q900 780 820 780 L640 780 L520 880 L520 780 L460 780 Q380 780 380 700 Z"
-          fill="url(#bubbleB)"/>
-  </g>
-
-  <!-- spark / cursor mark -->
-  <g fill="#fde68a">
-    <circle cx="820" cy="220" r="14"/>
-    <circle cx="880" cy="280" r="10"/>
-    <circle cx="780" cy="280" r="8"/>
+  <!--
+    Mark geometry is from compact lockup, viewBox 74×74 effective area.
+    Scale 11× and center: 74 * 11 = 814, offset = (1024 - 814) / 2 = 105.
+  -->
+  <g transform="translate(105 105) scale(11)" filter="url(#layerShadow)">
+    <rect x="0" y="0" width="66" height="66" rx="16" fill="#fbfaf7"/>
+    <path d="M18 15h24c7 0 12 5 12 12v23H30c-7 0-12-5-12-12V15Z" fill="#5a4f7b"/>
+    <path d="M10 24h24c7 0 12 5 12 12v14H22c-7 0-12-5-12-12V24Z" fill="#e08454"/>
+    <path d="M23 19h17c6 0 10 4 10 10v17H33c-6 0-10-4-10-10V19Z" fill="#23202d"/>
+    <circle cx="37" cy="33" r="5" fill="#fbfaf7"/>
   </g>
 </svg>
