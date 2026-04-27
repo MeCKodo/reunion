@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import {
   Bot,
   Globe,
@@ -172,18 +173,23 @@ export const TOOL_CATEGORY: Record<string, ToolCategory> = {
   exec_command: "exec", // Codex (current name, ~95% of tool calls)
   write_stdin: "exec", // Codex (feeds stdin into a running exec_command)
 
-  // planning / agent dispatch
-  TodoWrite: "agent",
+  // agent dispatch (actual subagent spawn)
   Task: "agent",
-  AskQuestion: "agent",
-  SwitchMode: "agent",
-  CreatePlan: "agent", // Cursor plan-mode tool
   Agent: "agent", // Claude Code subagent invocation
-  TaskCreate: "agent", // Claude Code task tracker
-  TaskUpdate: "agent",
-  Skill: "agent", // Claude Code skill invocation
-  AskUserQuestion: "agent", // Claude Code
-  update_plan: "agent", // Codex
+  spawn_agent: "agent", // Codex subagent spawn
+  wait_agent: "agent", // Codex wait for subagent
+  close_agent: "agent", // Codex close subagent
+
+  // planning / orchestration (not real subagent spawns)
+  TodoWrite: "default",
+  AskQuestion: "default",
+  SwitchMode: "default",
+  CreatePlan: "default", // Cursor plan-mode tool
+  TaskCreate: "default", // Claude Code task tracker
+  TaskUpdate: "default",
+  Skill: "default", // Claude Code skill invocation
+  AskUserQuestion: "default", // Claude Code
+  update_plan: "default", // Codex
 
   // web / external
   WebSearch: "web",
@@ -243,6 +249,10 @@ export const TOOL_BUCKET_LABEL: Record<ToolBucket, string> = {
   danger: "Danger",
 };
 
+export function getToolBucketLabel(bucket: ToolBucket): string {
+  return i18n.t(`toolBucket.${bucket}`);
+}
+
 /** Lucide icon per tool category — used by both MessageCard avatar and toolbar chips. */
 export const TOOL_ICONS: Partial<Record<ToolCategory, LucideIcon>> = {
   read: Search,
@@ -293,13 +303,14 @@ function extractSubagentLabel(toolInput: unknown): string | undefined {
   return undefined;
 }
 
-const SUBAGENT_TOOL_NAMES = new Set(["Task", "Agent"]);
+const SUBAGENT_TOOL_NAMES = new Set(["Task", "Agent", "spawn_agent"]);
 
 /**
  * Identify "spawn a child agent" tool calls — promoted to a dedicated
  * Subagent presentation everywhere (avatar, label, footer accent).
  *   - Cursor: `Task`
  *   - Claude Code: `Agent`
+ *   - Codex: `spawn_agent`
  */
 export function isSubagentToolEvent(toolName: string | undefined): boolean {
   return Boolean(toolName) && SUBAGENT_TOOL_NAMES.has(toolName as string);
@@ -309,7 +320,7 @@ export function isSubagentToolEvent(toolName: string | undefined): boolean {
  * Per-source assistant identity. Each chat backend has its own brand voice;
  * the message bubble keeps the same neutral surface but the avatar chip
  * carries a brand-tinted swatch so a glance tells you which agent spoke.
- *   - cursor:      TT red (project primary)
+ *   - cursor:      Twilight Ember (project primary)
  *   - claude-code: Anthropic warm orange
  *   - codex:       OpenAI charcoal
  */
@@ -354,7 +365,7 @@ export function roleMeta(
 ): RoleMeta {
   if (category === "user") {
     return {
-      label: "You",
+      label: i18n.t("format.you"),
       container:
         "bg-primary-soft/70 text-foreground rounded-md px-4 py-3",
       prose: true,
@@ -387,7 +398,9 @@ export function roleMeta(
       const subagentLabel = extractSubagentLabel(toolInput);
       const style = TOOL_STYLES.subagent;
       return {
-        label: subagentLabel ? `Subagent · ${subagentLabel}` : "Subagent",
+        label: subagentLabel
+          ? i18n.t("format.subagentLabel", { label: subagentLabel })
+          : i18n.t("format.subagent"),
         container:
           "bg-sky-50/50 border border-sky-200 border-l-[3px] border-l-sky-500 text-foreground rounded-md px-4 py-3",
         prose: false,
@@ -400,7 +413,7 @@ export function roleMeta(
     const style = toolStyle(toolName);
     const cat = toolCategory(toolName);
     return {
-      label: toolName ? `Tool · ${toolName}` : "Tool",
+      label: toolName ? i18n.t("format.toolLabel", { name: toolName }) : i18n.t("format.tool"),
       container:
         "bg-background-soft border border-border-strong text-foreground rounded-md px-4 py-3",
       prose: false,
@@ -416,7 +429,9 @@ export function roleMeta(
   // tool_result / image / etc. item types in the future.
   return {
     label:
-      contentType && contentType !== "text" ? `System · ${contentType}` : "System",
+      contentType && contentType !== "text"
+        ? i18n.t("format.systemLabel", { type: contentType })
+        : i18n.t("format.system"),
     container:
       "bg-muted border border-border text-muted-foreground rounded-md px-4 py-3",
     prose: false,
