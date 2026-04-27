@@ -1,37 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Reunion · macOS App Icon (1024×1024)
-  Style: Layered Prism — hero-cell ink lockup geometry
-  The L-shaped staircase inside is preserved from
-  logo-capability-suite.html › hero-cell ink.
+  Transparent background — only the mark geometry.
+  macOS applies its own squircle mask.
 
-  Tokens (sRGB hex, baked from oklch for rsvg/iconutil compatibility):
-    plate-glow      = oklch(56% 0.14 35)   — #a4623b (warm shoulder)
-    plate-mid       = oklch(34% 0.08 290)  — #3a2f55 (twilight purple)
-    plate-edge      = oklch(22% 0.04 290)  — #221c34 (night ink)
-    layer-card      = #fbfaf7 (paper card)
+  Tokens (sRGB hex):
     layer-shoulder  = #5a4f7b (purple mist)
     layer-ember     = #e08454 (twilight ember)
     layer-ink       = #23202d (inner deep ink)
     focal-eye       = #fbfaf7 (paper dot)
+
+  Mark bounding box in original coords: x(10..54) y(15..50) → 44×35
+  Scale 17× ≈ 748×595 → centered in 1024 with comfortable padding.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
-    <radialGradient id="plate" cx="32%" cy="24%" r="92%">
-      <stop offset="0%"  stop-color="#a4623b"/>
-      <stop offset="55%" stop-color="#3a2f55"/>
-      <stop offset="100%" stop-color="#221c34"/>
-    </radialGradient>
-
-    <linearGradient id="bevelHi" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.10"/>
-      <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-
     <filter id="layerShadow" x="-25%" y="-25%" width="150%" height="150%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="12"/>
-      <feOffset dx="0" dy="14" result="off"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.42"/></feComponentTransfer>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+      <feOffset dx="0" dy="8" result="off"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.30"/></feComponentTransfer>
       <feMerge>
         <feMergeNode/>
         <feMergeNode in="SourceGraphic"/>
@@ -39,15 +26,14 @@
     </filter>
   </defs>
 
-  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="url(#plate)"/>
-  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="url(#bevelHi)"/>
-
   <!--
-    Mark geometry is from compact lockup, viewBox 74×74 effective area.
-    Scale 11× and center: 74 * 11 = 814, offset = (1024 - 814) / 2 = 105.
+    Original mark shapes live in a ~44×35 unit space (x:10-54, y:15-50).
+    Center: (32, 32.5). Scale=17 → translate to center in 1024:
+      offsetX = 512 - 32*17 = 512 - 544 = -32
+      offsetY = 512 - 32.5*17 = 512 - 552.5 = -40.5
+    Rounded to: translate(-32, -40)
   -->
-  <g transform="translate(105 105) scale(11)" filter="url(#layerShadow)">
-    <rect x="0" y="0" width="66" height="66" rx="16" fill="#fbfaf7"/>
+  <g transform="translate(-32,-40) scale(17)" filter="url(#layerShadow)">
     <path d="M18 15h24c7 0 12 5 12 12v23H30c-7 0-12-5-12-12V15Z" fill="#5a4f7b"/>
     <path d="M10 24h24c7 0 12 5 12 12v14H22c-7 0-12-5-12-12V24Z" fill="#e08454"/>
     <path d="M23 19h17c6 0 10 4 10 10v17H33c-6 0-10-4-10-10V19Z" fill="#23202d"/>
