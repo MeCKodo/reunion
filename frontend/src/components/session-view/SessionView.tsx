@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { StatusBar, StatusItem, StatusDivider } from "@/components/ui/status-bar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SessionDetailSkeleton } from "@/components/shared/Skeleton";
+import { useElectronDrag } from "@/hooks/useElectronDrag";
 import { cn } from "@/lib/utils";
 import type { ExportKind } from "@/lib/api";
 import type {
@@ -111,20 +112,40 @@ function SessionView(props: SessionViewProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [detail]);
 
+  const { enabled: isMacElectron, dragStyle, noDragStyle } = useElectronDrag();
+
   const mobileTopBar = onOpenSidebar ? (
-    <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface px-3 py-2 lg:hidden">
+    <div
+      className="flex shrink-0 items-center gap-2 border-b border-border bg-surface px-3 py-2 lg:hidden"
+      style={dragStyle}
+    >
       <button
         type="button"
         onClick={onOpenSidebar}
         aria-label="Open sidebar"
+        style={noDragStyle}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border-strong bg-surface text-muted-foreground transition-colors hover:bg-background-soft hover:text-foreground"
       >
         <Menu className="h-4 w-4" />
       </button>
-      <span className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
+      <span
+        style={noDragStyle}
+        className="font-mono text-[10px] uppercase tracking-overline text-muted-foreground"
+      >
         Sessions
       </span>
     </div>
+  ) : null;
+
+  // 没有打开任何 session 时，右侧没有 SessionHeader 提供拖拽区域；为了让 macOS
+  // Electron 用户依旧能从顶部拖动窗口，在大屏下补一条隐形拖拽条（mobile 已经
+  // 通过 mobileTopBar 处理）。高度刚好覆盖红绿灯区域。
+  const electronEmptyTopDragBar = isMacElectron ? (
+    <div
+      className="hidden lg:block shrink-0 h-10"
+      style={dragStyle}
+      aria-hidden
+    />
   ) : null;
 
   if (!detail) {
@@ -136,6 +157,7 @@ function SessionView(props: SessionViewProps) {
         )}
       >
         {mobileTopBar}
+        {electronEmptyTopDragBar}
         <EmptyState
           eyebrow="ready"
           title="Select a conversation"

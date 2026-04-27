@@ -3,6 +3,7 @@ import { RefreshCw, Settings as SettingsIcon } from "lucide-react";
 import { SessionListSkeleton } from "@/components/shared/Skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SettingsDialog } from "@/components/settings/SettingsDialog";
+import { useElectronDrag } from "@/hooks/useElectronDrag";
 import { cn } from "@/lib/utils";
 import type {
   RepoGroup,
@@ -13,26 +14,6 @@ import type {
 import { SessionGroup } from "./SessionGroup";
 import { SidebarSearch } from "./SidebarSearch";
 import { SourceTabs } from "./SourceTabs";
-
-// macOS Electron 下需要给左上角的红/黄/绿交通灯按钮留出 ~70px 安全区，
-// 否则它们会盖在 sidebar 顶部的标题上。同时把顶部条标记为窗口拖拽区，
-// 让用户可以从这里拖动整个窗口（按钮 / 输入框单独 no-drag 保留交互）。
-function useIsMacElectron(): boolean {
-  const [isMac, setIsMac] = React.useState(false);
-  React.useEffect(() => {
-    if (typeof navigator === "undefined") return;
-    const ua = navigator.userAgent;
-    setIsMac(/Macintosh/i.test(ua) && /Electron/i.test(ua));
-  }, []);
-  return isMac;
-}
-
-const DRAG_STYLE: React.CSSProperties = {
-  WebkitAppRegion: "drag",
-} as React.CSSProperties;
-const NO_DRAG_STYLE: React.CSSProperties = {
-  WebkitAppRegion: "no-drag",
-} as React.CSSProperties;
 
 interface SidebarProps {
   query: string;
@@ -103,9 +84,11 @@ function Sidebar(props: SidebarProps) {
   const showSkeleton = firstLoad && loading;
   const showEmpty = !showSkeleton && groupedResults.length === 0;
 
-  const isMacElectron = useIsMacElectron();
-  const headerDragStyle = isMacElectron ? DRAG_STYLE : undefined;
-  const headerNoDragStyle = isMacElectron ? NO_DRAG_STYLE : undefined;
+  // macOS Electron 下需要给左上角的红/黄/绿交通灯按钮留出 ~70px 安全区，
+  // 否则它们会盖在 sidebar 顶部的标题上。同时把顶部条标记为窗口拖拽区，
+  // 让用户可以从这里拖动整个窗口（按钮 / 输入框单独 no-drag 保留交互）。
+  const { enabled: isMacElectron, dragStyle: headerDragStyle, noDragStyle: headerNoDragStyle } =
+    useElectronDrag();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   return (

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Copy, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useElectronDrag } from "@/hooks/useElectronDrag";
 import { cn } from "@/lib/utils";
 import { decodeEntities, formatDuration, formatTs, prettifyRepoName } from "@/lib/format";
 import type { ExportKind } from "@/lib/api";
@@ -61,8 +62,15 @@ function SessionHeader({
     return () => observer.disconnect();
   }, [fullTitle]);
 
+  // 让用户能从右侧顶栏的空白区域拖动整个窗口；按钮、标题、tag 编辑器
+  // 等可交互元素再单独标记为 no-drag。
+  const { dragStyle, noDragStyle } = useElectronDrag();
+
   return (
-    <div className="shrink-0 border-b border-border bg-background px-4 py-2 sm:px-6 sm:py-2.5 space-y-1">
+    <div
+      className="shrink-0 border-b border-border bg-background px-4 py-2 sm:px-6 sm:py-2.5 space-y-1"
+      style={dragStyle}
+    >
       {/* Row 1: star + single-line title + action cluster.
           Title is hard-truncated to one line; the full string is exposed via
           a native tooltip so power users can hover to read the rest. */}
@@ -71,6 +79,7 @@ function SessionHeader({
           type="button"
           onClick={onToggleStar}
           title={detail.starred ? "Unstar" : "Star"}
+          style={noDragStyle}
           className={cn(
             "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors shrink-0",
             detail.starred
@@ -85,8 +94,9 @@ function SessionHeader({
             the custom tooltip. We deliberately omit the native `title`
             attribute: the browser's tooltip would race + stack on top of
             our instant React one. The full title is still in the DOM as
-            visible text, so screen readers read it from the h1 directly. */}
-        <div className="group/title relative min-w-0 flex-1">
+            visible text, so screen readers read it from the h1 directly.
+            标题本身不是按钮，但仍需 no-drag 让用户可选中文字 / 触发 tooltip。 */}
+        <div className="group/title relative min-w-0 flex-1" style={noDragStyle}>
           <h1
             ref={titleRef}
             className="truncate text-base leading-[1.3] font-semibold tracking-tight text-foreground sm:text-[17px]"
@@ -103,7 +113,7 @@ function SessionHeader({
           ) : null}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0" style={noDragStyle}>
           <ExportActions onExport={onExport} loadingKind={exportLoading} />
 
           <Button
@@ -123,8 +133,12 @@ function SessionHeader({
 
       {/* Row 2: source + repo + time + tags, all on one wrappable line
           aligned beneath the title. Tag editor lives inline so it shares
-          this row instead of taking its own. */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 pl-9">
+          this row instead of taking its own. 整行 no-drag，避免 badge 上的
+          hover tooltip / tag 编辑器被窗口拖拽事件吞掉。 */}
+      <div
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 pl-9"
+        style={noDragStyle}
+      >
         <span
           className={cn(
             "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] whitespace-nowrap",
