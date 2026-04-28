@@ -7,6 +7,9 @@
 import { IncomingMessage, ServerResponse } from "node:http";
 
 import { json, readJsonBody } from "../lib/http.js";
+import { openSse, sendSse, endSse, abortSignalFromReq } from "../lib/sse.js";
+import { runTagBatch, BATCH_LIMIT, clampConcurrency } from "./tag-runner.js";
+import { EXTRACT_STRATEGIES, type ExtractStrategy } from "./tagger.js";
 import {
   deleteOpenAiAccount,
   setDefaultOpenAiAccount,
@@ -56,42 +59,6 @@ const OPENAI_MODELS: ReadonlyArray<OpenAiModelOption> = [
   { id: "gpt-5.4-mini", label: "GPT-5.4 mini", isDefault: false, supportsReasoning: false },
   { id: "gpt-5.4-codex", label: "GPT-5.4 Codex", isDefault: false, supportsReasoning: true },
 ];
-
-// ---------------------------------------------------------------------------
-// SSE helpers
-// ---------------------------------------------------------------------------
-
-function openSse(res: ServerResponse): void {
-  res.statusCode = 200;
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders?.();
-}
-
-function sendSse(res: ServerResponse, event: string, data: unknown): void {
-  if (res.destroyed) return;
-  const payload = JSON.stringify(data);
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${payload}\n\n`);
-}
-
-function endSse(res: ServerResponse): void {
-  if (res.destroyed) return;
-  try {
-    res.write("event: end\ndata: {}\n\n");
-    res.end();
-  } catch {
-    // ignore close races
-  }
-}
-
-function abortSignalFromReq(req: IncomingMessage): AbortSignal {
-  const ac = new AbortController();
-  req.on("close", () => ac.abort());
-  return ac.signal;
-}
 
 // ---------------------------------------------------------------------------
 // shape -> JSON
@@ -443,6 +410,69 @@ export async function handleAiRun(req: IncomingMessage, res: ServerResponse) {
 }
 
 // ---------------------------------------------------------------------------
+// AI auto-tagging: POST /api/ai/tag-sessions (SSE)
+// ---------------------------------------------------------------------------
+
+interface AiTagBody {
+  sessionKeys?: unknown;
+  options?: {
+    includeAlreadyTagged?: unknown;
+    strategy?: unknown;
+    provider?: unknown;
+    model?: unknown;
+    maxConcurrency?: unknown;
+  };
+}
+
+export async function handleAiTagSessions(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJsonBody<AiTagBody>(req, {});
+
+  const sessionKeys = Array.isArray(body.sessionKeys)
+    ? body.sessionKeys.filter((k): k is string => typeof k === "string" && k.length > 0)
+    : [];
+  if (sessionKeys.length === 0) {
+    json(res, 400, { error: "sessionKeys is required" });
+    return;
+  }
+  if (sessionKeys.length > BATCH_LIMIT) {
+    json(res, 400, {
+      error: `Batch too large: ${sessionKeys.length} > ${BATCH_LIMIT}`,
+      limit: BATCH_LIMIT,
+    });
+    return;
+  }
+
+  const opts = body.options || {};
+  const includeAlreadyTagged = opts.includeAlreadyTagged === true;
+  const strategy: ExtractStrategy =
+    typeof opts.strategy === "string" &&
+    (EXTRACT_STRATEGIES as readonly string[]).includes(opts.strategy)
+      ? (opts.strategy as ExtractStrategy)
+      : "auto";
+  const provider: AiProvider | undefined =
+    opts.provider === "openai" || opts.provider === "cursor" ? opts.provider : undefined;
+  const model = typeof opts.model === "string" ? opts.model : undefined;
+  const maxConcurrency = clampConcurrency(opts.maxConcurrency);
+
+  openSse(res);
+  const signal = abortSignalFromReq(req);
+
+  const result = await runTagBatch({
+    sessionKeys,
+    includeAlreadyTagged,
+    strategy,
+    provider,
+    model,
+    maxConcurrency,
+    signal,
+    onProgress: (event) => sendSse(res, "progress", event),
+  });
+
+  sendSse(res, "done", result);
+  endSse(res);
+}
+
+// ---------------------------------------------------------------------------
 // dispatcher
 // ---------------------------------------------------------------------------
 
@@ -503,6 +533,10 @@ export async function dispatchAi(
   }
   if (method === "POST" && pathname === "/api/ai/run") {
     await handleAiRun(req, res);
+    return true;
+  }
+  if (method === "POST" && pathname === "/api/ai/tag-sessions") {
+    await handleAiTagSessions(req, res);
     return true;
   }
   return false;

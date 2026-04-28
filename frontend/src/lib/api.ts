@@ -381,6 +381,38 @@ export interface TaskResult {
   bytes: number;
 }
 
+/**
+ * Per-session record kept on an AI-tagging task snapshot. Lets the UI
+ * render the failure list and surface skipped sessions without needing
+ * an extra round-trip.
+ */
+export interface AiTaggingTaskItem {
+  sessionKey: string;
+  status: AiTaggingProgressStatus;
+  /** Final merged tag list when status === "ok". */
+  tags?: string[];
+  /** Why this entry was skipped. */
+  reason?: string;
+  error?: string;
+}
+
+export interface AiTaggingTaskState {
+  total: number;
+  done: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  /** Most recent in-flight session key — surfaced as "Current: ..." in the UI. */
+  currentSessionKey?: string;
+  /** Append-only history of per-session outcomes, newest last. */
+  items: AiTaggingTaskItem[];
+  /** Did the user click stop? Used to label the final summary. */
+  aborted?: boolean;
+  strategy: AiTagExtractStrategy;
+  provider?: AiProvider;
+  model?: string;
+}
+
 export interface TaskSnapshot {
   id: string;
   type: string;
@@ -390,6 +422,8 @@ export interface TaskSnapshot {
   progress?: TaskProgress;
   result?: TaskResult;
   error?: string;
+  /** Populated only when type === "ai-tagging". */
+  aiTagging?: AiTaggingTaskState;
 }
 
 export interface CreateTaskRequest {
@@ -751,6 +785,90 @@ export interface AiRunRequest {
   model?: string;
   instructions?: string;
   signal?: AbortSignal;
+}
+
+// ---------------------------------------------------------------------------
+// AI auto-tagging (SSE)
+// ---------------------------------------------------------------------------
+
+export type AiTagExtractStrategy = "auto" | "first" | "first_last" | "sample" | "all";
+
+/**
+ * Hard cap on a single tagging batch. Mirrors `AI_TAG_BATCH_LIMIT` in the
+ * backend (`src/ai/http-handlers.ts`). Frontend pre-trims to this number
+ * so the user gets a clear UI hint instead of a 400 from the server.
+ */
+export const AI_TAG_BATCH_LIMIT = 100;
+
+/**
+ * Worker pool concurrency we tell the server to use. Matches the backend
+ * hardcap so big batches saturate the pool. The server still clamps if a
+ * larger value sneaks through.
+ */
+export const AI_TAG_MAX_CONCURRENCY = 8;
+
+export interface AiTaggingPayload {
+  sessionKeys: string[];
+  options?: {
+    includeAlreadyTagged?: boolean;
+    strategy?: AiTagExtractStrategy;
+    provider?: AiProvider;
+    model?: string;
+    maxConcurrency?: number;
+  };
+}
+
+export type AiTaggingProgressStatus = "ok" | "skip" | "fail";
+
+export type AiTaggingProgress = {
+  index: number;
+  total: number;
+  sessionKey: string;
+  status: AiTaggingProgressStatus;
+  /** Why this entry was skipped: "already_tagged" | "no_user_messages" | "not_found". */
+  reason?: string;
+  /** AI-only tags this run produced (subset of allTags). */
+  tags?: string[];
+  /** Final merged tag list after appending the AI tags. */
+  allTags?: string[];
+  strategyUsed?: string;
+  aiTaggedAt?: number;
+  error?: string;
+};
+
+export type AiTaggingDone = {
+  updated: number;
+  skipped: number;
+  failed: number;
+  total: number;
+  aborted: boolean;
+  tags: TagSummary[];
+};
+
+export type AiTaggingEvent =
+  | { type: "progress"; data: AiTaggingProgress }
+  | { type: "done"; data: AiTaggingDone };
+
+export async function* runAiTagging(
+  payload: AiTaggingPayload,
+  opts: { signal?: AbortSignal } = {}
+): AsyncIterable<AiTaggingEvent> {
+  const res = await fetch("/api/ai/tag-sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: opts.signal,
+  });
+  for await (const frame of parseSseStream(res, opts.signal)) {
+    if (frame.event === "progress") {
+      yield { type: "progress", data: frame.data as AiTaggingProgress };
+    } else if (frame.event === "done") {
+      yield { type: "done", data: frame.data as AiTaggingDone };
+      return;
+    } else if (frame.event === "end") {
+      return;
+    }
+  }
 }
 
 export async function* runAi(req: AiRunRequest): AsyncIterable<AiRunEvent> {

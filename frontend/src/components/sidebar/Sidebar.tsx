@@ -10,6 +10,7 @@ import { useTaskCenter } from "@/lib/task-center";
 import { cn } from "@/lib/utils";
 import type {
   RepoGroup,
+  SearchResult,
   SourceFilter,
   SourceSummary,
   TagSummary,
@@ -47,6 +48,8 @@ interface SidebarProps {
   totalCount: number;
   hasQuery: boolean;
   groupedResults: RepoGroup[];
+  filteredResults: SearchResult[];
+  onAiTaggerError?: (message: string) => void;
   collapsedRepos: Record<string, boolean>;
   onToggleRepo: (repo: string) => void;
   activeSessionKey: string;
@@ -245,16 +248,15 @@ function Sidebar(props: SidebarProps) {
 function ReunionMark({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 74 74"
+      viewBox="0 0 84 84"
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Reunion"
       className={className}
     >
-      <rect x="0" y="0" width="66" height="66" rx="16" fill="#fbfaf7" />
-      <path d="M18 15h24c7 0 12 5 12 12v23H30c-7 0-12-5-12-12V15Z" fill="#5a4f7b" />
-      <path d="M10 24h24c7 0 12 5 12 12v14H22c-7 0-12-5-12-12V24Z" fill="#e08454" />
-      <path d="M23 19h17c6 0 10 4 10 10v17H33c-6 0-10-4-10-10V19Z" fill="#23202d" />
-      <circle cx="37" cy="33" r="5" fill="#fbfaf7" />
+      <rect x="14" y="14" width="50" height="50" rx="14" fill="oklch(42% 0.06 280)" opacity={0.7} />
+      <rect x="22" y="22" width="50" height="50" rx="14" fill="oklch(68% 0.16 35)" opacity={0.94} />
+      <rect x="30" y="30" width="34" height="34" rx="9" fill="oklch(95% 0.015 60)" />
+      <circle cx="47" cy="47" r="6" fill="oklch(22% 0.04 280)" />
     </svg>
   );
 }

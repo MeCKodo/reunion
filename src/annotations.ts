@@ -33,6 +33,10 @@ export function isAnnotationEmpty(a: SessionAnnotation): boolean {
   if (a.starred) return false;
   if (a.tags && a.tags.length > 0) return false;
   if (a.notes && a.notes.trim()) return false;
+  // aiTaggedAt alone (with no surviving tags) means "we tried but the user
+  // removed everything"; we still keep that record so the auto-runner does
+  // not re-process it on the next pass.
+  if (typeof a.aiTaggedAt === "number") return false;
   return true;
 }
 
@@ -92,6 +96,8 @@ export function projectAnnotation(
     starred: Boolean(ann?.starred),
     tags: Array.isArray(ann?.tags) ? ann!.tags! : [],
     notes: typeof ann?.notes === "string" ? ann.notes : "",
+    ai_tag_set: Array.isArray(ann?.aiTagSet) ? ann!.aiTagSet! : [],
+    ai_tagged_at: typeof ann?.aiTaggedAt === "number" ? ann!.aiTaggedAt : null,
   };
 }
 

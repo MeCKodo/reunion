@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   CheckCircle2,
@@ -7,12 +8,14 @@ import {
   FolderOpen,
   Loader2,
   ListTodo,
+  Sparkles,
+  StopCircle,
   X,
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTaskCenter } from "@/lib/task-center";
-import { postOpenPath, type TaskSnapshot } from "@/lib/api";
+import { postOpenPath, type AiTaggingTaskItem, type TaskSnapshot } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 
 export function TaskCenter() {
@@ -23,6 +26,13 @@ export function TaskCenter() {
 
   React.useEffect(() => {
     for (const task of tasks) {
+      // AI tagging tasks already surface their own toasts via the
+      // task-center handlers wired up in App.tsx, so we skip them here
+      // to avoid double-notifying.
+      if (task.type === "ai-tagging") {
+        notifiedRef.current.add(task.id);
+        continue;
+      }
       if (task.status === "done" && !notifiedRef.current.has(task.id)) {
         notifiedRef.current.add(task.id);
         pushToast(
@@ -146,6 +156,7 @@ function TaskItem({ task }: { task: TaskSnapshot }) {
   const { dismissTask } = useTaskCenter();
   const { push: pushToast } = useToast();
   const isActive = task.status === "pending" || task.status === "running";
+  const isAiTagging = task.type === "ai-tagging";
 
   const handleOpen = async (absPath: string) => {
     try {
@@ -169,7 +180,11 @@ function TaskItem({ task }: { task: TaskSnapshot }) {
       {/* Header row */}
       <div className="flex items-start gap-2.5">
         <div className="mt-0.5 shrink-0">
-          <TaskStatusIcon status={task.status} />
+          {isAiTagging ? (
+            <AiTaggingStatusIcon task={task} />
+          ) : (
+            <TaskStatusIcon status={task.status} />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-1.5">
@@ -190,7 +205,11 @@ function TaskItem({ task }: { task: TaskSnapshot }) {
 
           {/* Status text */}
           <div className="mt-1 flex items-center gap-2 text-[11.5px] text-muted-foreground">
-            <span>{task.progress?.detail || phaseLabel(task)}</span>
+            <span>
+              {isAiTagging
+                ? aiTaggingDetail(task)
+                : task.progress?.detail || phaseLabel(task)}
+            </span>
             {task.progress?.elapsedSec != null && task.progress.elapsedSec > 0 ? (
               <span className="inline-flex items-center gap-0.5">
                 <Clock className="h-3 w-3" />
@@ -201,43 +220,190 @@ function TaskItem({ task }: { task: TaskSnapshot }) {
         </div>
       </div>
 
-      {/* Progress bar for active tasks */}
-      {isActive ? (
-        <div className="mt-2.5 ml-6.5">
-          <TaskProgressBar task={task} />
+      {/* AI tagging task body */}
+      {isAiTagging ? (
+        <AiTaggingTaskBody task={task} />
+      ) : (
+        <>
+          {/* Progress bar for active export tasks */}
+          {isActive ? (
+            <div className="mt-2.5 ml-6.5">
+              <TaskProgressBar task={task} />
+            </div>
+          ) : null}
+
+          {/* Action buttons for completed tasks */}
+          {task.status === "done" && task.result ? (
+            <div className="mt-2.5 ml-6.5 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleOpen(task.result!.absolutePath)}
+                className="inline-flex items-center gap-1 rounded border border-border-strong bg-background px-2 py-1 text-[11px] text-foreground hover:bg-background-soft transition-colors"
+              >
+                <FileText className="h-3 w-3" />
+                打开文件
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReveal(task.result!.absolutePath)}
+                className="inline-flex items-center gap-1 rounded border border-border-strong bg-background px-2 py-1 text-[11px] text-foreground hover:bg-background-soft transition-colors"
+              >
+                <FolderOpen className="h-3 w-3" />
+                在 Finder 中显示
+              </button>
+            </div>
+          ) : null}
+
+          {/* Error display */}
+          {task.status === "failed" && task.error ? (
+            <div className="mt-2 ml-6.5 rounded bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive leading-relaxed">
+              {task.error}
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+function AiTaggingStatusIcon({ task }: { task: TaskSnapshot }) {
+  if (task.status === "running" || task.status === "pending") {
+    return <Sparkles className="h-4 w-4 animate-pulse text-primary" />;
+  }
+  if (task.status === "done") {
+    if (task.aiTagging?.aborted) {
+      return <StopCircle className="h-4 w-4 text-muted-foreground" />;
+    }
+    return <CheckCircle2 className="h-4 w-4 text-primary" />;
+  }
+  if (task.status === "failed") {
+    return <AlertCircle className="h-4 w-4 text-destructive" />;
+  }
+  return <Sparkles className="h-4 w-4 text-muted-foreground" />;
+}
+
+function aiTaggingDetail(task: TaskSnapshot): string {
+  const state = task.aiTagging;
+  if (!state) return "";
+  if (task.status === "running" || task.status === "pending") {
+    return `${state.done} / ${state.total}`;
+  }
+  return "";
+}
+
+function AiTaggingTaskBody({ task }: { task: TaskSnapshot }) {
+  const { dismissTask } = useTaskCenter();
+  const { t } = useTranslation();
+  const [showFailures, setShowFailures] = React.useState(false);
+  const state = task.aiTagging;
+  if (!state) return null;
+
+  const isActive = task.status === "running" || task.status === "pending";
+  const failures = state.items.filter((item) => item.status === "fail");
+  const pct = state.total > 0 ? Math.min(100, Math.round((state.done / state.total) * 100)) : 0;
+
+  return (
+    <div className="mt-2.5 ml-6.5 space-y-2">
+      {/* Progress bar */}
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-border/60">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-300 ease-out",
+            isActive ? "bg-primary" : state.aborted ? "bg-muted-foreground/60" : "bg-primary"
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      {/* Current session (when running) */}
+      {isActive && state.currentSessionKey ? (
+        <div className="text-[11px] text-muted-foreground truncate">
+          {t("aiTagger.runningCurrent", {
+            title: shortenSessionKey(state.currentSessionKey),
+          })}
         </div>
       ) : null}
 
-      {/* Action buttons for completed tasks */}
-      {task.status === "done" && task.result ? (
-        <div className="mt-2.5 ml-6.5 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => handleOpen(task.result!.absolutePath)}
-            className="inline-flex items-center gap-1 rounded border border-border-strong bg-background px-2 py-1 text-[11px] text-foreground hover:bg-background-soft transition-colors"
-          >
-            <FileText className="h-3 w-3" />
-            打开文件
-          </button>
-          <button
-            type="button"
-            onClick={() => handleReveal(task.result!.absolutePath)}
-            className="inline-flex items-center gap-1 rounded border border-border-strong bg-background px-2 py-1 text-[11px] text-foreground hover:bg-background-soft transition-colors"
-          >
-            <FolderOpen className="h-3 w-3" />
-            在 Finder 中显示
-          </button>
+      {/* Final summary */}
+      {!isActive ? (
+        <div className="text-[11.5px] text-foreground/85">
+          {state.aborted
+            ? t("aiTagger.abortedSummary", {
+                updated: state.updated,
+                skipped: state.skipped,
+                failed: state.failed,
+              })
+            : t("aiTagger.doneSummary", {
+                updated: state.updated,
+                skipped: state.skipped,
+                failed: state.failed,
+              })}
         </div>
       ) : null}
 
-      {/* Error display */}
-      {task.status === "failed" && task.error ? (
-        <div className="mt-2 ml-6.5 rounded bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive leading-relaxed">
-          {task.error}
+      {/* Action row */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {isActive ? (
+          <button
+            type="button"
+            onClick={() => dismissTask(task.id)}
+            className="inline-flex items-center gap-1 rounded border border-border-strong bg-background px-2 py-1 text-[11px] text-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          >
+            <StopCircle className="h-3 w-3" />
+            {t("aiTagger.abort")}
+          </button>
+        ) : null}
+        {failures.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowFailures((v) => !v)}
+            className="inline-flex items-center gap-1 rounded border border-border-strong bg-background px-2 py-1 text-[11px] text-foreground hover:bg-background-soft transition-colors"
+          >
+            {showFailures
+              ? t("aiTagger.hideFailures")
+              : t("aiTagger.showFailures", { count: failures.length })}
+          </button>
+        ) : null}
+      </div>
+
+      {/* Failures list */}
+      {showFailures && failures.length > 0 ? (
+        <div className="space-y-1 rounded border border-destructive/20 bg-destructive/5 p-2">
+          {failures.slice(-20).map((item, idx) => (
+            <FailureRow key={`${item.sessionKey}-${idx}`} item={item} />
+          ))}
         </div>
       ) : null}
     </div>
   );
+}
+
+function FailureRow({ item }: { item: AiTaggingTaskItem }) {
+  const { t } = useTranslation();
+  const reasonText =
+    item.reason === "already_tagged"
+      ? t("aiTagger.skipReasonAlreadyTagged")
+      : item.reason === "no_user_messages"
+      ? t("aiTagger.skipReasonNoUserMessages")
+      : item.reason === "not_found"
+      ? t("aiTagger.skipReasonNotFound")
+      : item.error || t("aiTagger.failGeneric");
+  return (
+    <div className="text-[10.5px] leading-relaxed">
+      <div className="font-mono text-muted-foreground truncate">
+        {shortenSessionKey(item.sessionKey)}
+      </div>
+      <div className="text-destructive break-all">{reasonText}</div>
+    </div>
+  );
+}
+
+function shortenSessionKey(key: string): string {
+  // session keys look like "<source>:<uuid>" — keep tail for at-a-glance ID
+  const idx = key.indexOf(":");
+  if (idx < 0) return key;
+  const tail = key.slice(idx + 1);
+  return tail.length > 32 ? `${tail.slice(0, 12)}…${tail.slice(-12)}` : tail;
 }
 
 function TaskProgressBar({ task }: { task: TaskSnapshot }) {

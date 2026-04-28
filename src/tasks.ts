@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { promises as fsp } from "node:fs";
 import { ServerResponse } from "node:http";
+import { openSse, sendSse, endSse } from "./lib/sse.js";
 
 import {
   generateExportMarkdown,
@@ -376,37 +377,16 @@ export function streamTaskToSse(
 ): void {
   const task = tasks.get(taskId);
 
-  // SSE headers
-  res.statusCode = 200;
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders?.();
-
-  const send = (event: string, data: unknown) => {
-    if (res.destroyed) return;
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  };
-
-  const end = () => {
-    if (res.destroyed) return;
-    try {
-      res.write("event: end\ndata: {}\n\n");
-      res.end();
-    } catch {
-      // ignore
-    }
-  };
+  openSse(res);
 
   if (!task) {
-    send("error", { error: "task not found" });
-    end();
+    sendSse(res, "error", { error: "task not found" });
+    endSse(res);
     return;
   }
 
   const sendSnapshot = (t: Task) => {
-    send("snapshot", {
+    sendSse(res, "snapshot", {
       id: t.id,
       type: t.type,
       status: t.status,
@@ -418,24 +398,21 @@ export function streamTaskToSse(
     });
   };
 
-  // Send current state immediately
   sendSnapshot(task);
 
   if (task.status === "done" || task.status === "failed") {
-    end();
+    endSse(res);
     return;
   }
 
-  // Subscribe for updates
   const unsub = subscribe(taskId, (updated) => {
     sendSnapshot(updated);
     if (updated.status === "done" || updated.status === "failed") {
       unsub();
-      end();
+      endSse(res);
     }
   });
 
-  // Client disconnect
   res.on("close", () => {
     unsub();
   });

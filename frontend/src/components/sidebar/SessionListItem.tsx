@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Clock3, Star } from "lucide-react";
+import { Clock3, Sparkles, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   decodeEntities,
@@ -61,6 +61,17 @@ function SessionListItemImpl({
   const tags = item.tags ?? [];
   const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
   const overflowTagCount = Math.max(0, tags.length - visibleTags.length);
+  const aiTagSet = React.useMemo(
+    () => new Set(item.ai_tag_set ?? []),
+    [item.ai_tag_set]
+  );
+  const aiTagTooltip = React.useMemo(() => {
+    if (typeof item.ai_tagged_at !== "number") return t("tags.aiTagBadge");
+    const date = new Date(item.ai_tagged_at * 1000);
+    if (Number.isNaN(date.getTime())) return t("tags.aiTagBadge");
+    const formatted = date.toISOString().slice(0, 10);
+    return t("tags.aiTagBadgeWithDate", { date: formatted });
+  }, [item.ai_tagged_at, t]);
 
   return (
     <div
@@ -131,11 +142,24 @@ function SessionListItemImpl({
               <>
                 <span className="opacity-40">·</span>
                 <span className="flex min-w-0 items-center gap-1 truncate">
-                  {visibleTags.map((tag) => (
-                    <span key={tag} className="text-muted-foreground/90">
-                      #{tag}
-                    </span>
-                  ))}
+                  {visibleTags.map((tag) => {
+                    const isAi = aiTagSet.has(tag);
+                    return (
+                      <span
+                        key={tag}
+                        className={cn(
+                          "inline-flex items-center gap-0.5",
+                          isAi
+                            ? "text-accent/80"
+                            : "text-muted-foreground/90"
+                        )}
+                        title={isAi ? aiTagTooltip : undefined}
+                      >
+                        {isAi ? <Sparkles className="h-2.5 w-2.5" /> : null}
+                        <span>#{tag}</span>
+                      </span>
+                    );
+                  })}
                   {overflowTagCount > 0 ? (
                     <span className="text-muted-foreground/60">+{overflowTagCount}</span>
                   ) : null}

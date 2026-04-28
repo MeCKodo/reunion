@@ -57,6 +57,9 @@ export function useAnnotations({ setResults, setDetail, onError }: UseAnnotation
       const flat = {
         starred: Boolean(annotation?.starred),
         tags: annotation?.tags || [],
+        ai_tag_set: annotation?.aiTagSet || [],
+        ai_tagged_at:
+          typeof annotation?.aiTaggedAt === "number" ? annotation.aiTaggedAt : null,
       };
       setResults((prev) =>
         prev.map((item) => (item.session_key === sessionKey ? { ...item, ...flat } : item))
@@ -69,13 +72,25 @@ export function useAnnotations({ setResults, setDetail, onError }: UseAnnotation
   const put = useCallback(
     async (sessionKey: string, patch: AnnotationPatch) => {
       const prev = annotationsRef.current[sessionKey];
+      const nextTags = Array.isArray(patch.tags) ? patch.tags : prev?.tags;
+      // Mirror backend behaviour: removing a tag from `tags` should also
+      // strip it from `aiTagSet` so the AI subset never drifts past the
+      // surviving tag list. Adding a manual tag does not touch aiTagSet.
+      const survivedAiSet =
+        prev?.aiTagSet && nextTags
+          ? prev.aiTagSet.filter((t) => nextTags.includes(t))
+          : prev?.aiTagSet;
       const optimistic: SessionAnnotation = {
         starred: typeof patch.starred === "boolean" ? patch.starred : prev?.starred,
-        tags: Array.isArray(patch.tags) ? patch.tags : prev?.tags,
+        tags: nextTags,
+        aiTagSet: survivedAiSet && survivedAiSet.length > 0 ? survivedAiSet : undefined,
+        aiTaggedAt: prev?.aiTaggedAt,
         updatedAt: Math.floor(Date.now() / 1000),
       };
       const isEmpty =
-        !optimistic.starred && (!optimistic.tags || optimistic.tags.length === 0);
+        !optimistic.starred &&
+        (!optimistic.tags || optimistic.tags.length === 0) &&
+        typeof optimistic.aiTaggedAt !== "number";
       applyLocal(sessionKey, isEmpty ? null : optimistic);
 
       try {
@@ -119,6 +134,39 @@ export function useAnnotations({ setResults, setDetail, onError }: UseAnnotation
     [put]
   );
 
+  /**
+   * Apply a single AI auto-tagging result optimistically. Used by the
+   * AI tagger SSE loop so the UI scrolls real-time as each session
+   * completes — the final `setAllTagsSummary` call (driven by the
+   * server's `done` event) reconciles any drift.
+   */
+  const applyAiTagResult = useCallback(
+    (
+      sessionKey: string,
+      payload: { allTags: string[]; aiTags: string[]; aiTaggedAt: number }
+    ) => {
+      const prev = annotationsRef.current[sessionKey];
+      const next: SessionAnnotation = {
+        ...(prev || {}),
+        tags: payload.allTags,
+        aiTagSet: payload.aiTags.length > 0 ? payload.aiTags : undefined,
+        aiTaggedAt: payload.aiTaggedAt,
+        updatedAt: Math.floor(Date.now() / 1000),
+      };
+      applyLocal(sessionKey, next);
+    },
+    [applyLocal]
+  );
+
+  /**
+   * Replace the global tag summary in one shot. Called once at the end
+   * of an AI tagging run with the server's authoritative count so we
+   * don't accumulate small drift from per-progress refreshes.
+   */
+  const setAllTagsSummary = useCallback((tags: TagSummary[]) => {
+    setAllTags(tags);
+  }, []);
+
   const loadOnce = useCallback(async () => {
     try {
       const data = await fetchAnnotations();
@@ -146,6 +194,8 @@ export function useAnnotations({ setResults, setDetail, onError }: UseAnnotation
     removeTag,
     put,
     applyLocal,
+    applyAiTagResult,
+    setAllTagsSummary,
     loadOnce,
     annotationsRef,
   };

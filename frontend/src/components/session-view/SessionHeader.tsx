@@ -178,6 +178,8 @@ function SessionHeader({
           setTagInput={setTagInput}
           onAddTag={onAddTag}
           onRemoveTag={onRemoveTag}
+          aiTags={detail.ai_tag_set}
+          aiTaggedAt={detail.ai_tagged_at}
         />
       </div>
     </div>

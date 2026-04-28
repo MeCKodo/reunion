@@ -55,6 +55,19 @@ export type SessionAnnotation = {
   starred?: boolean;
   tags?: string[];
   notes?: string;
+  /**
+   * Subset of `tags` that came from the AI auto-tagger. Lets the UI render
+   * AI-suggested tags with a different visual treatment without changing
+   * any of the existing tag-search/filter pipelines (which still operate
+   * on the merged `tags` array).
+   */
+  aiTagSet?: string[];
+  /**
+   * Unix seconds timestamp of the last successful AI tagging run for this
+   * session. `undefined` means "never tagged by AI", which the bulk runner
+   * uses to skip already-processed sessions by default.
+   */
+  aiTaggedAt?: number;
   updatedAt: number;
 };
 

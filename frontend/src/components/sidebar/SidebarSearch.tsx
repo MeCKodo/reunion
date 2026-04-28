@@ -8,6 +8,8 @@ import { prettifyRepoName } from "@/lib/format";
 import { DAY_OPTIONS, type TagSummary } from "@/lib/types";
 import { ChipButton } from "./ChipButton";
 import { TagFilterPopover } from "./TagFilterPopover";
+import { AiTaggerButton } from "./AiTaggerButton";
+import type { SearchResult } from "@/lib/types";
 
 interface SidebarSearchProps {
   query: string;
@@ -26,6 +28,13 @@ interface SidebarSearchProps {
   allTags: TagSummary[];
   tagPickerOpen: boolean;
   setTagPickerOpen: (value: boolean) => void;
+  /**
+   * Flat list of currently filtered sessions, fed straight to the AI
+   * tagger button so it can target the same set the user sees in the
+   * sidebar (no extra "select all" step).
+   */
+  filteredResults: SearchResult[];
+  onAiTaggerError?: (message: string) => void;
 }
 
 function SidebarSearch({
@@ -45,6 +54,8 @@ function SidebarSearch({
   allTags,
   tagPickerOpen,
   setTagPickerOpen,
+  filteredResults,
+  onAiTaggerError,
 }: SidebarSearchProps) {
   const { t } = useTranslation();
   const hasAdvancedFilter = selectedRepo !== "all" || days !== "30";
@@ -100,6 +111,12 @@ function SidebarSearch({
           setSelectedTags={setSelectedTags}
           open={tagPickerOpen}
           setOpen={setTagPickerOpen}
+        />
+
+        <AiTaggerButton
+          filteredResults={filteredResults}
+          allTags={allTags}
+          onError={onAiTaggerError}
         />
 
         <Popover>

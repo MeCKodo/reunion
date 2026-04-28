@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Tag, X } from "lucide-react";
+import { Plus, Sparkles, Tag, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SessionTagEditorProps {
   tags: string[];
@@ -8,6 +9,10 @@ interface SessionTagEditorProps {
   setTagInput: (value: string) => void;
   onAddTag: (value: string) => boolean;
   onRemoveTag: (value: string) => void;
+  /** Subset of `tags` that came from the AI auto-tagger. */
+  aiTags?: string[];
+  /** Unix seconds; used in the AI tag tooltip. */
+  aiTaggedAt?: number | null;
 }
 
 function SessionTagEditor({
@@ -16,6 +21,8 @@ function SessionTagEditor({
   setTagInput,
   onAddTag,
   onRemoveTag,
+  aiTags,
+  aiTaggedAt,
 }: SessionTagEditorProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = React.useState(false);
@@ -32,6 +39,14 @@ function SessionTagEditor({
     setEditing(true);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
+
+  const aiTagSet = React.useMemo(() => new Set(aiTags || []), [aiTags]);
+  const aiTooltip = React.useMemo(() => {
+    if (typeof aiTaggedAt !== "number") return t("tags.aiTagBadge");
+    const date = new Date(aiTaggedAt * 1000);
+    if (Number.isNaN(date.getTime())) return t("tags.aiTagBadge");
+    return t("tags.aiTagBadgeWithDate", { date: date.toISOString().slice(0, 10) });
+  }, [aiTaggedAt, t]);
 
   const hasTags = tags.length > 0;
 
@@ -54,22 +69,32 @@ function SessionTagEditor({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {tags.map((tag) => (
-        <span
-          key={tag}
-          className="group inline-flex items-center gap-1 rounded-full bg-accent-soft/70 pl-2 pr-1 py-0.5 text-xs font-medium text-accent transition-colors hover:bg-accent-soft"
-        >
-          #{tag}
-          <button
-            type="button"
-            onClick={() => onRemoveTag(tag)}
-            className="rounded-full p-0.5 text-accent/40 transition-colors hover:bg-accent/10 hover:text-destructive"
-            title={t("tags.removeTag")}
+      {tags.map((tag) => {
+        const isAi = aiTagSet.has(tag);
+        return (
+          <span
+            key={tag}
+            title={isAi ? aiTooltip : undefined}
+            className={cn(
+              "group inline-flex items-center gap-1 rounded-full pl-2 pr-1 py-0.5 text-xs font-medium transition-colors",
+              isAi
+                ? "bg-accent-soft/40 text-accent/85 ring-1 ring-inset ring-accent/20 hover:bg-accent-soft/60"
+                : "bg-accent-soft/70 text-accent hover:bg-accent-soft"
+            )}
           >
-            <X className="h-3 w-3" />
-          </button>
-        </span>
-      ))}
+            {isAi ? <Sparkles className="h-2.5 w-2.5 opacity-80" /> : null}
+            #{tag}
+            <button
+              type="button"
+              onClick={() => onRemoveTag(tag)}
+              className="rounded-full p-0.5 text-accent/40 transition-colors hover:bg-accent/10 hover:text-destructive"
+              title={t("tags.removeTag")}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        );
+      })}
 
       {editing ? (
         <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft/40 px-2.5 py-0.5">

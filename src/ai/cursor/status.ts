@@ -17,9 +17,40 @@
 // which makes it print the OAuth URL on stdout so we can route it through
 // shell.openExternal in the renderer.
 
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { runAndCapture, runWithUrlExtraction, type UrlStreamEvent } from "../cli-spawn.js";
 
 const CURSOR_CMD = (process.env.CURSOR_AGENT_CMD || "cursor-agent").trim();
+
+/**
+ * Path to cursor-agent's combined config + state file. The CLI atomic-writes
+ * this on each run with a fixed `.tmp` filename, so concurrent processes can
+ * race on the rename — see `looksTransientCli` in src/ai/http-handlers.ts.
+ */
+export const CURSOR_CLI_CONFIG_PATH = path.join(os.homedir(), ".cursor", "cli-config.json");
+
+/**
+ * Read the model id currently cached in `~/.cursor/cli-config.json`. This is
+ * what cursor-agent will use when spawned without `--model`, and what it'll
+ * overwrite (causing a cli-config.json rewrite) when spawned WITH `--model`
+ * pointing at a different id.
+ *
+ * Returns null when the file doesn't exist, can't be parsed, or has no model
+ * field — all of which signal "next cursor-agent run will write cli-config".
+ */
+export async function getCachedCursorModelId(): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(CURSOR_CLI_CONFIG_PATH, "utf8");
+    const json = JSON.parse(raw);
+    const modelId = json?.model?.modelId;
+    return typeof modelId === "string" && modelId.length > 0 ? modelId : null;
+  } catch {
+    return null;
+  }
+}
 const STATUS_TIMEOUT_MS = 10_000;
 const ABOUT_TIMEOUT_MS = 15_000;
 const LOGIN_TIMEOUT_MS = 5 * 60_000;

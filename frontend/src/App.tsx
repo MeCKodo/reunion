@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { ScrollToTop } from "@/components/shared/ScrollToTop";
 import { TaskCenter } from "@/components/task-center/TaskCenter";
+import { useTaskCenter } from "@/lib/task-center";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { SessionView } from "@/components/session-view/SessionView";
 import { useToast } from "@/components/ui/toast";
@@ -139,11 +140,41 @@ export default function App() {
     addTag,
     removeTag,
     loadOnce: loadAnnotationsOnce,
+    applyAiTagResult,
+    setAllTagsSummary,
   } = useAnnotations({
     setResults,
     setDetail,
     onError: (message) => notify(message, "error"),
   });
+
+  // Bridge AI tagging events from the task center into the annotation
+  // cache. Registering once per render is fine because the task center
+  // stores the latest handlers in a ref and calls them only while a
+  // run is in flight.
+  const { registerAiTaggingHandlers } = useTaskCenter();
+  useEffect(() => {
+    return registerAiTaggingHandlers({
+      onSessionTagged: (sessionKey, payload) => {
+        applyAiTagResult(sessionKey, payload);
+      },
+      onTagSummary: (tags) => {
+        setAllTagsSummary(tags);
+      },
+      onComplete: (summary) => {
+        notify(
+          t("aiTagger.successToast", { updated: summary.updated }),
+          "success"
+        );
+      },
+      onAbort: () => {
+        notify(t("aiTagger.abortToast"), "info");
+      },
+      onError: (message) => {
+        notify(message, "error");
+      },
+    });
+  }, [applyAiTagResult, notify, registerAiTaggingHandlers, setAllTagsSummary, t]);
 
   // ── Derived / memoized data ────────────────────────────────────────
   // Deferred query keeps the input itself snappy while expensive derivations
@@ -857,6 +888,8 @@ export default function App() {
             totalCount={results.length}
             hasQuery={hasQuery}
             groupedResults={groupedResults}
+            filteredResults={filteredResults}
+            onAiTaggerError={(message) => notify(message, "error")}
             collapsedRepos={collapsedRepos}
             onToggleRepo={handleToggleRepo}
             activeSessionKey={activeSessionKey}

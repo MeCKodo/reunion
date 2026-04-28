@@ -2,6 +2,10 @@ export type SessionAnnotation = {
   starred?: boolean;
   tags?: string[];
   notes?: string;
+  /** Subset of `tags` that came from the AI auto-tagger. */
+  aiTagSet?: string[];
+  /** Unix seconds: timestamp of the last successful AI tagging run. */
+  aiTaggedAt?: number;
   updatedAt?: number;
 };
 
@@ -90,6 +94,10 @@ export type SearchResult = {
   starred?: boolean;
   tags?: string[];
   notes?: string;
+  /** Subset of `tags` produced by the AI auto-tagger (snake_case from API). */
+  ai_tag_set?: string[];
+  /** Unix seconds; null if AI has never tagged this session. */
+  ai_tagged_at?: number | null;
 };
 
 export type ClockAlignment = {

@@ -16,6 +16,7 @@ yarn-error.log*
 .vscode/
 .idea/
 .cursor/
+.claude/
 coverage/
 *.tsbuildinfo
 .DS_Store
