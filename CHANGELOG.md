@@ -5,6 +5,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- **AI 批量打标签（AI Tagger）**：选定会话后 AI 自动从用户消息中提炼 1-3 个简短标签，支持 OpenAI / Cursor 双 provider
+- **后台任务中心（Task Center）**：异步任务进度条 + SSE 实时推送 + 可中止
+- **国际化（i18n）**：i18next 中 / 英双语，跟随系统语言；覆盖前端 UI、Electron 原生菜单、静态回退页
+- 落地页 / Hero 页面（静态回退模式下的入口）
+- Twilight Ember 品牌 logo
+
+### Changed
+
+- 消息渲染增强：Markdown 渲染性能优化、工具桶筛选（Read / Write / Exec / Agent 等分类统计与过滤）
+- 搜索性能：WeakMap 缓存已解码小写文本，重复搜索即时响应
+- 路由模块化重构
+
+### Fixed
+
+- Agent 筛选器中工具桶分类修正
+
+## [0.2.1]
+
+### Changed
+
+- 简化 macOS App 图标背板
+
 ## [0.2.0]
 
 ### Added
@@ -58,7 +82,8 @@
 - Smart Rules / Smart Skill 导出（基于 `cursor-agent`）
 - 时间过滤（7/30/60/90 天）+ 项目筛选
 
-[Unreleased]: https://github.com/MeCKodo/reunion/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/MeCKodo/reunion/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/MeCKodo/reunion/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/MeCKodo/reunion/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/MeCKodo/reunion/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/MeCKodo/reunion/releases/tag/v0.1.0

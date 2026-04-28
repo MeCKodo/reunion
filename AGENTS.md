@@ -25,10 +25,13 @@ pnpm run serve   # http://127.0.0.1:9765
 src/server.ts              # 后端：Node.js HTTP 服务（无框架）
 src/http-server.ts         # 路由分发；将 /api/ai/* 委派给 src/ai/http-handlers
 src/export.ts              # Smart Rules / Smart Skill 生成；走 src/ai/router
+src/routes/tasks.ts        # 后台任务路由（Task Center SSE）
 src/ai/                    # ── AI provider 集成（v0.2.0）
   router.ts                #   provider 路由：openai-bearer / cursor-cli
   settings.ts              #   {defaultProvider, defaultOpenAiAccountId, defaultModel}
-  http-handlers.ts         #   /api/ai/* 路由（accounts CRUD + SSE login + run）
+  http-handlers.ts         #   /api/ai/* 路由（accounts CRUD + SSE login + run + tag）
+  tagger.ts                #   AI 自动打标签 prompt 模板
+  tag-runner.ts            #   批量打标签并发池 + SSE 进度推送
   cli-spawn.ts             #   通用 spawn helper（runAndCapture / runWithUrlExtraction）
   openai/                  #   多账号 ChatGPT OAuth（每个账号独立 codex-home）
     auth.ts                #     auth.json 读写 + token refresh（vendor agent-meter）
@@ -41,8 +44,13 @@ src/ai/                    # ── AI provider 集成（v0.2.0）
     run.ts                 #     spawn `cursor-agent --print` 一次性 prompt
 frontend/                  # 前端：React SPA (Vite)
   dist/                    #   Vite 构建产物（必须存在才能正确服务）
+  src/i18n/                #   国际化配置（i18next，中/英双语）
+  src/lib/task-center.tsx  #   前端任务中心状态管理
   src/components/settings/SettingsDialog.tsx  # AI providers 管理界面
-static/index.html           # 旧版纯 HTML 前端（回退方案）
+  src/components/task-center/TaskCenter.tsx   # 后台任务进度 UI
+  src/components/sidebar/AiTaggerButton.tsx   # AI 批量打标签入口
+  src/components/sidebar/TagFilterPopover.tsx # 标签筛选弹窗
+static/index.html           # 旧版纯 HTML 前端（回退方案，含国际化）
 data/
   chat_index.json          # 会话索引文件（运行时生成）
   ai/                      # ── AI provider 数据（v0.2.0）
@@ -89,6 +97,7 @@ data/
 | POST | `/api/ai/cursor/login` (SSE) | 触发 `cursor-agent login`（NO_OPEN_BROWSER） |
 | POST | `/api/ai/cursor/logout` | `cursor-agent logout` |
 | POST | `/api/ai/run` (SSE) | 流式跑 prompt：body `{prompt, provider?, accountId?, model?, instructions?}` |
+| POST | `/api/ai/tag-sessions` (SSE) | 批量 AI 打标签：body `{sessionKeys, provider?, accountId?, model?}`，SSE 推送 progress/done |
 
 ## 关键约定
 

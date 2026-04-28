@@ -30,8 +30,8 @@ curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.s
 
 | 你的 Mac | 下载文件 |
 | --- | --- |
-| **Apple Silicon**（M1 / M2 / M3 / M4） | `Reunion-0.1.0-arm64.dmg` |
-| **Intel** Mac | `Reunion-0.1.0.dmg` |
+| **Apple Silicon**（M1 / M2 / M3 / M4） | `Reunion-{version}-arm64.dmg` |
+| **Intel** Mac | `Reunion-{version}.dmg` |
 
 > 不知道自己是哪种？终端运行 `uname -m`：返回 `arm64` 选第一个，返回 `x86_64` 选第二个。
 

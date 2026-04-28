@@ -17,7 +17,7 @@ Reunion 把你本地所有 AI Coding Agent 的对话**重新聚到一起**，可
 
 ## 版本
 
-- **当前版本**：v0.1.1（详见 [CHANGELOG.md](./CHANGELOG.md)）
+- **当前版本**：v0.2.1（详见 [CHANGELOG.md](./CHANGELOG.md)）
 - **GitHub**：[MeCKodo/reunion](https://github.com/MeCKodo/reunion)
 
 ## 安装（同事拿到 Mac 直接跑）
@@ -107,8 +107,8 @@ pnpm run dist:mac          # 同时打 arm64 + x64
 ```
 
 产物在 `release/` 目录：
-- `Reunion-0.1.0-arm64.dmg` —— Apple Silicon
-- `Reunion-0.1.0.dmg` —— Intel Mac
+- `Reunion-{version}-arm64.dmg` —— Apple Silicon
+- `Reunion-{version}.dmg` —— Intel Mac
 - 同名 `*-mac.zip` 是给 `electron-updater` 增量更新用的（暂未启用）
 
 #### 签名策略
@@ -150,6 +150,10 @@ pnpm run dist:mac          # 同时打 arm64 + x64
 - 一键打开原始 transcript 文件（Open）
 - Smart Rules / Smart Skill 导出（OpenAI 多账号 OAuth 或 Cursor Agent，自动按默认 provider 路由）
 - AI provider 设置面板（侧边栏齿轮图标）：管理多 ChatGPT 账号、Cursor 单账号、默认 provider
+- AI 批量自动打标签（AI Tagger）：选定会话后 AI 自动提炼 1-3 个标签
+- 后台任务中心（Task Center）：异步任务进度条 / SSE 实时推送 / 可中止
+- 国际化（i18n）：中/英双语，跟随系统语言
+- 工具桶筛选（Read / Write / Exec / Agent 等工具分类统计与过滤）
 - 回到顶部按钮
 - 一键重建索引（Reindex）
 
