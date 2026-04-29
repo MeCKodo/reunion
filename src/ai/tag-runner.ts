@@ -211,7 +211,15 @@ export async function runTagBatch(opts: AiTagBatchOptions): Promise<TagBatchResu
         const session = sessionMap.get(sessionKey);
         const prev = annotations[sessionKey];
 
-        if (!includeAlreadyTagged && typeof prev?.aiTaggedAt === "number") {
+        // "Already tagged" only counts as a skip-worthy signal when the AI's
+        // tags are still on the session. If the user has manually cleared
+        // the tag list, that's an implicit "redo" — `aiTaggedAt` alone is
+        // kept around for history but no longer suppresses re-tagging. The
+        // explicit `includeAlreadyTagged` flag still lets users force a
+        // re-tag of sessions whose tags are intact.
+        const aiAlreadyRan = typeof prev?.aiTaggedAt === "number";
+        const hasSurvivingTags = (prev?.tags?.length ?? 0) > 0;
+        if (!includeAlreadyTagged && aiAlreadyRan && hasSurvivingTags) {
           skipped += 1;
           onProgress({ status: "skip", index: idx + 1, total, sessionKey, reason: "already_tagged" });
           continue;

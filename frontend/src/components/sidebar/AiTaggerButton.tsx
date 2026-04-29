@@ -70,10 +70,19 @@ export function AiTaggerButton({
   const [strategy, setStrategy] = React.useState<AiTagExtractStrategy>("auto");
   const [submitting, setSubmitting] = React.useState(false);
 
+  // A session counts as "needs tagging" when the AI never ran on it OR the
+  // user has since cleared its tag list (an implicit "please re-tag" signal).
+  // Mirrors the backend skip logic in tag-runner.ts so the count we surface
+  // matches exactly what the batch run will pick up.
+  const needsTagging = React.useCallback(
+    (r: SearchResult) => !r.ai_tagged_at || (r.tags?.length ?? 0) === 0,
+    []
+  );
+
   const eligibleAll = React.useMemo(() => {
     if (includeAlreadyTagged) return filteredResults;
-    return filteredResults.filter((r) => !r.ai_tagged_at);
-  }, [filteredResults, includeAlreadyTagged]);
+    return filteredResults.filter(needsTagging);
+  }, [filteredResults, includeAlreadyTagged, needsTagging]);
 
   // Cap at the backend batch limit so the server never has to reject our
   // request. Anything beyond the cap is surfaced in the UI as an overflow
@@ -84,14 +93,20 @@ export function AiTaggerButton({
   );
   const overflowCount = Math.max(0, eligibleAll.length - AI_TAG_BATCH_LIMIT);
 
+  // "Already tagged" hint counts only sessions where the AI ran AND the tags
+  // are still attached — clearing the tags is what flips them out of this
+  // bucket and into the eligible set.
   const alreadyTaggedCount = React.useMemo(
-    () => filteredResults.filter((r) => Boolean(r.ai_tagged_at)).length,
+    () =>
+      filteredResults.filter(
+        (r) => Boolean(r.ai_tagged_at) && (r.tags?.length ?? 0) > 0
+      ).length,
     [filteredResults]
   );
 
   const buttonCount = React.useMemo(
-    () => filteredResults.filter((r) => !r.ai_tagged_at).length,
-    [filteredResults]
+    () => filteredResults.filter(needsTagging).length,
+    [filteredResults, needsTagging]
   );
 
   // Lazy-load AI accounts the first time the modal is opened. We keep the
