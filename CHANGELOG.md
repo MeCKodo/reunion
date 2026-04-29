@@ -5,23 +5,22 @@
 
 ## [Unreleased]
 
+## [0.2.2]
+
 ### Added
 
-- **AI 批量打标签（AI Tagger）**：选定会话后 AI 自动从用户消息中提炼 1-3 个简短标签，支持 OpenAI / Cursor 双 provider
-- **后台任务中心（Task Center）**：异步任务进度条 + SSE 实时推送 + 可中止
-- **国际化（i18n）**：i18next 中 / 英双语，跟随系统语言；覆盖前端 UI、Electron 原生菜单、静态回退页
-- 落地页 / Hero 页面（静态回退模式下的入口）
-- Twilight Ember 品牌 logo
+- **会话 JSONL 下载**：会话头部新增「More 」操作菜单，整合复制 session_id / 下载原始 JSONL transcript / 删除会话三项；后端新增 `GET /api/session/:sessionKey/jsonl`（仅允许 .jsonl + 仅在配置的 Cursor / Claude / Codex roots 下，防越权读取）。把 transcript 直接发给维护者排查问题再也不用手动翻 `~/.cursor` / `~/.claude` / `~/.codex`。
+- **AI Tagger：清空 tag 视为隐式重打**：用户手动删光某条会话的 tag 后，下次批量打标会重新跑该条；之前需要去 Advanced 里勾「Include already tagged」才行。前端「AI Tag (N)」按钮上的数字与后端实际跑的列表完全对齐。
 
 ### Changed
 
-- 消息渲染增强：Markdown 渲染性能优化、工具桶筛选（Read / Write / Exec / Agent 等分类统计与过滤）
-- 搜索性能：WeakMap 缓存已解码小写文本，重复搜索即时响应
-- 路由模块化重构
+- **Cursor 模型菜单收敛到 GPT-5.5 / Opus 4.6 / Opus 4.7 系列**：cursor-agent CLI 暴露的 ~96 个模型缩到 19 个，过滤前缀维护在 `src/ai/cursor/models-allowlist.ts`，未来加家族只需追加一行；CLI 默认 `composer-2-fast` 被过滤掉时自动把 `gpt-5.5-medium` 提升为新默认。Router 在 spawn 时还会再 substitute 一次，杜绝旧 `settings.defaultModel` 或硬编码 id 绕过白名单。
 
 ### Fixed
 
-- Agent 筛选器中工具桶分类修正
+- **cursor-agent Workspace Trust 阻塞**：cursor-agent `--print` 模式新增的「Workspace Trust Required」检查会让从 Finder/Dock 启动的打包应用（cwd = `/`）所有 AI 调用全部失败。所有 spawn 现在统一传 `--trust` + 稳定 cwd（`CURSOR_AGENT_CWD` > `REUNION_DATA_DIR` > `os.homedir()`）。
+- **批量打标 cli-config.json 并发竞态**：cursor-agent 每次启动都原子重写 `~/.cursor/cli-config.json`，并发 spawn 会撞出 `ENOENT: rename '.tmp' → 'cli-config.json'` 和 `Unexpected end of JSON input` 两种失败。新增进程内 spawn stagger 锁（默认 150ms 间隔，可由 `CURSOR_SPAWN_STAGGER_MS` 调整）让 spawn 时刻错峰；transient 重试拓宽识别 + `RETRY_MAX` 1 → 2 兜底。
+- **Trust 错误不再浪费 retry**：识别为 `looksTrustBlocked()` 后立即 hard-fail，给用户一条 actionable 的提示而不是原始 stderr。
 
 ## [0.2.1]
 
@@ -82,7 +81,8 @@
 - Smart Rules / Smart Skill 导出（基于 `cursor-agent`）
 - 时间过滤（7/30/60/90 天）+ 项目筛选
 
-[Unreleased]: https://github.com/MeCKodo/reunion/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/MeCKodo/reunion/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/MeCKodo/reunion/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/MeCKodo/reunion/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/MeCKodo/reunion/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/MeCKodo/reunion/compare/v0.1.0...v0.1.1
