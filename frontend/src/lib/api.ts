@@ -81,6 +81,39 @@ export type DeleteSessionResponse = {
   error?: string;
 };
 
+export interface SessionJsonlResult {
+  blob: Blob;
+  filename: string;
+}
+
+/**
+ * Download the raw JSONL transcript for a session as a blob. Used by the
+ * "More" action menu so users can ship the original log to a maintainer for
+ * debugging without manually digging into ~/.cursor / ~/.claude / ~/.codex.
+ */
+export async function fetchSessionJsonl(
+  sessionKey: string,
+  fallbackName: string
+): Promise<SessionJsonlResult> {
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionKey)}/jsonl`);
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const data = (await res.json()) as { error?: string };
+      detail = data?.error || "";
+    } catch {
+      // fall through with HTTP-only error
+    }
+    throw new Error(detail ? `${detail} (HTTP ${res.status})` : `HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const filename = parseFilenameFromContentDisposition(
+    res.headers.get("Content-Disposition"),
+    fallbackName
+  );
+  return { blob, filename };
+}
+
 export async function deleteSession(sessionKey: string): Promise<DeleteSessionResponse> {
   const res = await fetch(`/api/session/${encodeURIComponent(sessionKey)}`, {
     method: "DELETE",

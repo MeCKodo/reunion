@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
-import { promises as fs } from "node:fs";
+import { promises as fs, createReadStream } from "node:fs";
+import path from "node:path";
 import {
   ANNOTATION_NOTES_MAX,
   LEGACY_STATIC_FILE,
@@ -295,6 +296,73 @@ async function handleDeleteAnnotation({ res, url }: RouteContext) {
   json(res, 200, { ok: true, tags: buildTagSummary(annotations) });
 }
 
+async function handleSessionJsonl({ res, url, roots }: RouteContext) {
+  const match = url.pathname.match(/^\/api\/session\/(.+)\/jsonl$/);
+  if (!match) {
+    json(res, 404, { ok: false, error: "session not found" });
+    return;
+  }
+  const sessionKey = decodeURIComponent(match[1]);
+  const indexData = await loadIndex();
+  const session = indexData.sessions.find((item) => item.sessionKey === sessionKey);
+  if (!session) {
+    json(res, 404, { ok: false, error: "session not found" });
+    return;
+  }
+
+  // Defence in depth: only files (a) ending in .jsonl and (b) sitting inside
+  // one of the configured source roots are downloadable. Anything else is
+  // rejected so this endpoint can't be coerced into reading random local
+  // files even if the index ever held a stale entry.
+  const filePath = path.resolve(session.filePath);
+  if (path.extname(filePath).toLowerCase() !== ".jsonl") {
+    json(res, 415, { ok: false, error: "not a jsonl transcript" });
+    return;
+  }
+  const allowedRoots = [roots.cursor, roots.claudeCode, roots.codex]
+    .filter(Boolean)
+    .map((root) => path.resolve(root));
+  const inRoot = allowedRoots.some(
+    (root) => filePath === root || filePath.startsWith(root + path.sep)
+  );
+  if (!inRoot) {
+    json(res, 403, { ok: false, error: "path not in allowed roots" });
+    return;
+  }
+
+  let stat: Awaited<ReturnType<typeof fs.stat>>;
+  try {
+    stat = await fs.stat(filePath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    json(res, code === "ENOENT" ? 404 : 500, { ok: false, error: String(error) });
+    return;
+  }
+  if (!stat.isFile()) {
+    json(res, 404, { ok: false, error: "not a file" });
+    return;
+  }
+
+  // Filename: <source>-<sessionId>.jsonl. Sanitize defensively even though
+  // sessionId is normally a UUID/path-safe string.
+  const safeId = session.sessionId.replace(/[^A-Za-z0-9._-]/g, "_");
+  const downloadName = `${session.source}-${safeId}.jsonl`;
+
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Content-Length", String(stat.size));
+  res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
+  res.setHeader("Cache-Control", "no-store");
+
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(filePath);
+    stream.once("error", reject);
+    res.once("close", () => stream.destroy());
+    stream.once("end", () => resolve());
+    stream.pipe(res);
+  });
+}
+
 async function handleOpenFile({ res, url }: RouteContext) {
   const indexData = await loadIndex();
   const sessionKey = decodeURIComponent(url.pathname.replace("/api/open-file/", ""));
@@ -350,6 +418,10 @@ async function dispatch(ctx: RouteContext): Promise<void> {
   if (method === "GET" && pathname === "/api/repos") return handleListRepos(ctx);
   if (method === "GET" && pathname === "/api/sources") return handleListSources(ctx);
   if (method === "GET" && pathname === "/api/search") return handleSearch(ctx);
+  // Match the JSONL download before the generic detail handler — `startsWith`
+  // alone would swallow `/api/session/<key>/jsonl` and return JSON instead.
+  if (method === "GET" && pathname.match(/^\/api\/session\/.+\/jsonl$/))
+    return handleSessionJsonl(ctx);
   if (method === "GET" && pathname.startsWith("/api/session/")) return handleSessionDetail(ctx);
   if (method === "DELETE" && pathname.startsWith("/api/session/")) return handleDeleteSession(ctx);
   if (method === "POST" && pathname === "/api/reindex") return handleReindex(ctx);

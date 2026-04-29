@@ -1,15 +1,14 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Star } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Star } from "lucide-react";
 import { useElectronDrag } from "@/hooks/useElectronDrag";
 import { cn } from "@/lib/utils";
 import { decodeEntities, formatDuration, formatTs, prettifyRepoName } from "@/lib/format";
 import type { ExportKind } from "@/lib/api";
 import type { SessionDetail, SourceId } from "@/lib/types";
 import { SOURCE_LABEL } from "@/lib/types";
-import { DeleteSessionButton } from "./DeleteSessionButton";
 import { ExportActions } from "./ExportActions";
+import { MoreActionsMenu } from "./MoreActionsMenu";
 import { SessionTagEditor } from "./SessionTagEditor";
 
 const SOURCE_BADGE_CLASS: Record<SourceId, string> = {
@@ -26,6 +25,7 @@ interface SessionHeaderProps {
   onExport: (kind: ExportKind) => void;
   exportLoading: "" | ExportKind;
   onDeleteSession: () => Promise<void>;
+  onDownloadJsonl: () => Promise<void>;
 
   tagInput: string;
   setTagInput: (value: string) => void;
@@ -40,6 +40,7 @@ function SessionHeader({
   onExport,
   exportLoading,
   onDeleteSession,
+  onDownloadJsonl,
   tagInput,
   setTagInput,
   onAddTag,
@@ -118,18 +119,12 @@ function SessionHeader({
         <div className="flex items-center gap-1.5 shrink-0" style={noDragStyle}>
           <ExportActions onExport={onExport} loadingKind={exportLoading} />
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="shrink-0"
-            onClick={onCopySessionId}
-            title={t("session.copySessionId", { id: detail.session_id })}
-          >
-            <Copy className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">{t("session.sessionId")}</span>
-          </Button>
-
-          <DeleteSessionButton title={fullTitle} onConfirm={onDeleteSession} />
+          <MoreActionsMenu
+            sessionTitle={fullTitle}
+            onCopySessionId={onCopySessionId}
+            onDownloadJsonl={onDownloadJsonl}
+            onDeleteSession={onDeleteSession}
+          />
         </div>
       </div>
 
