@@ -48,6 +48,7 @@ interface SessionViewProps {
   onExport: (kind: ExportKind) => void;
   exportLoading: "" | ExportKind;
   onDeleteSession: () => Promise<void>;
+  onDownloadJsonl: () => Promise<void>;
 
   tagInput: string;
   setTagInput: (value: string) => void;
@@ -85,6 +86,7 @@ function SessionView(props: SessionViewProps) {
     onExport,
     exportLoading,
     onDeleteSession,
+    onDownloadJsonl,
     tagInput,
     setTagInput,
     onAddTag,
@@ -186,6 +188,7 @@ function SessionView(props: SessionViewProps) {
         onExport={onExport}
         exportLoading={exportLoading}
         onDeleteSession={onDeleteSession}
+        onDownloadJsonl={onDownloadJsonl}
         tagInput={tagInput}
         setTagInput={setTagInput}
         onAddTag={onAddTag}

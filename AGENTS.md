@@ -85,6 +85,7 @@ data/
 | GET | `/api/repos` | 获取所有 repo 列表 |
 | GET | `/api/search?q=&days=30&repo=&limit=100` | 全文检索会话 |
 | GET | `/api/session/:sessionKey` | 获取单个会话详情与内容 |
+| GET | `/api/session/:sessionKey/jsonl` | 以附件形式下载原始 JSONL transcript（前端 More 菜单使用） |
 | POST | `/api/reindex` | 重建索引 |
 | POST | `/api/open-file/:sessionKey` | 用系统默认应用打开原始 transcript |
 | GET | `/api/export/:sessionKey?type=rules\|skill&mode=smart\|basic&provider=&accountId=` | 导出 RULES.md 或 SKILL.md（provider/accountId 可省，默认走 settings） |
@@ -112,7 +113,7 @@ data/
 
 ## 文档索引
 
-- [`README.md`](./README.md) — 用户视角 + 开发文档
+- [`README.md`](./README.md) — 产品介绍 + 安装
 - [`CHANGELOG.md`](./CHANGELOG.md) — 版本变更记录
 - [`FIRST_OPEN.md`](./FIRST_OPEN.md) — 同事拿到 DMG 后的安装/卸载/排错说明
 - [`electron-builder.yml`](./electron-builder.yml) — 打包配置（含未来升级付费签名的注释）

@@ -211,6 +211,20 @@
     "repoSourceNone": "无可靠提示 — 请手动选择"
   },
 
+  "more": {
+    "menuLabel": "更多",
+    "menuTooltip": "更多操作",
+    "copySessionId": "复制 Session ID",
+    "copySessionIdHint": "把原始 session_id 复制到剪贴板。",
+    "downloadJsonl": "下载原始 JSONL",
+    "downloadJsonlHint": "保存原始 transcript 文件，方便发给维护者排查问题。",
+    "downloadingJsonl": "正在准备「{{title}}」的 JSONL…",
+    "downloadJsonlSuccess": "JSONL 已保存 · {{filename}}",
+    "downloadJsonlFailed": "JSONL 下载失败：{{error}}",
+    "deleteSession": "删除会话…",
+    "deleteSessionHint": "永久删除 transcript 文件与本地标注。"
+  },
+
   "delete": {
     "deleteButton": "删除",
     "deleteTooltip": "删除此会话（及其 transcript 文件）",

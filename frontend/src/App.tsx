@@ -17,6 +17,7 @@ import {
   fetchRepos,
   fetchSearch,
   fetchSession,
+  fetchSessionJsonl,
   fetchSources,
   postOpenPath,
   postReindex,
@@ -641,11 +642,34 @@ export default function App() {
     [detail, dismissToast, notify, pushToast, t]
   );
 
+  // Download the raw JSONL transcript for the currently open session.
+  // Surfaced in the SessionHeader's "More" menu so users can ship the file
+  // to a maintainer when something goes wrong with parsing/rendering.
+  const onDownloadJsonl = useCallback(async () => {
+    if (!detail) return;
+    const friendlyTitle = decodeEntities(detail.title || detail.session_id);
+    const toastId = pushToast(
+      t("more.downloadingJsonl", { title: friendlyTitle }),
+      "loading"
+    );
+    try {
+      const fallback = `${detail.source}-${detail.session_id}.jsonl`;
+      const { blob, filename } = await fetchSessionJsonl(detail.session_key, fallback);
+      downloadBlob(blob, filename);
+      dismissToast(toastId);
+      notify(t("more.downloadJsonlSuccess", { filename }), "success", 6000);
+    } catch (error) {
+      dismissToast(toastId);
+      notify(t("more.downloadJsonlFailed", { error: String(error) }), "error", 8000);
+      throw error;
+    }
+  }, [detail, dismissToast, notify, pushToast, t]);
+
   // Permanently remove the currently open session: nukes the transcript file
   // (and any sidechain agents) on disk via the backend, prunes the session
   // from results, clears the open detail pane + URL state, and surfaces a
-  // toast for both success and failure. The DeleteSessionButton awaits this
-  // promise to keep its busy state in sync.
+  // toast for both success and failure. The MoreActionsMenu awaits this
+  // promise to keep its busy state + confirmation popover in sync.
   const onDeleteSession = useCallback(async () => {
     if (!detail) return;
     const sessionKey = detail.session_key;
@@ -933,6 +957,7 @@ export default function App() {
           onExport={onExport}
           exportLoading={exportLoading}
           onDeleteSession={onDeleteSession}
+          onDownloadJsonl={onDownloadJsonl}
           tagInput={tagInput}
           setTagInput={setTagInput}
           onAddTag={(value) => (detail ? addTag(detail.session_key, value) : false)}

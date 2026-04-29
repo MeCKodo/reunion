@@ -22,6 +22,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { runAndCapture, runWithUrlExtraction, type UrlStreamEvent } from "../cli-spawn.js";
+import {
+  CURSOR_DEFAULT_MODEL_ID,
+  isAllowedCursorModelId,
+} from "./models-allowlist.js";
+import { getCursorSpawnCwd } from "./spawn-env.js";
 
 const CURSOR_CMD = (process.env.CURSOR_AGENT_CMD || "cursor-agent").trim();
 
@@ -118,6 +123,7 @@ export function invalidateCursorCache(): void {
 async function fetchCursorAccountState(): Promise<CursorAccountState> {
   const status = await runAndCapture(CURSOR_CMD, ["status"], {
     timeoutMs: STATUS_TIMEOUT_MS,
+    cwd: getCursorSpawnCwd(),
   });
 
   if (status.error && (status.error.includes("ENOENT") || status.error.includes("not found"))) {
@@ -149,6 +155,7 @@ async function fetchCursorAccountState(): Promise<CursorAccountState> {
 
   const about = await runAndCapture(CURSOR_CMD, ["about"], {
     timeoutMs: ABOUT_TIMEOUT_MS,
+    cwd: getCursorSpawnCwd(),
   });
   const aboutText = `${about.stdout}\n${about.stderr}`;
   const { email: aboutEmail, plan } = parseAbout(aboutText);
@@ -226,6 +233,7 @@ export async function* startCursorLogin(): AsyncIterable<CursorLoginEvent> {
 
   for await (const event of runWithUrlExtraction(CURSOR_CMD, ["login"], {
     env,
+    cwd: getCursorSpawnCwd(),
     timeoutMs: LOGIN_TIMEOUT_MS,
     urlPattern: /(https:\/\/(?:cursor\.com|api2\.cursor\.sh)\/[^\s'"<>]+)/g,
   })) {
@@ -265,6 +273,7 @@ export async function* startCursorLogin(): AsyncIterable<CursorLoginEvent> {
 export async function logoutCursor(): Promise<{ ok: boolean; error?: string }> {
   const r = await runAndCapture(CURSOR_CMD, ["logout"], {
     timeoutMs: LOGOUT_TIMEOUT_MS,
+    cwd: getCursorSpawnCwd(),
   });
   if (!r.ok) {
     return { ok: false, error: r.error || "logout failed" };
@@ -309,10 +318,35 @@ export function parseCursorModels(text: string): CursorModel[] {
   return out;
 }
 
+/**
+ * Apply Reunion's curated allow-list to the raw CLI model list.
+ *
+ * Two responsibilities beyond plain filtering:
+ *   - If cursor-agent's reported default (typically `composer-2-fast`) gets
+ *     stripped out, promote our soft default (`CURSOR_DEFAULT_MODEL_ID`) to
+ *     `isDefault: true` so the frontend's auto-select / "★" affordances
+ *     keep working.
+ *   - If the soft default itself isn't in the filtered list (e.g. the user's
+ *     plan no longer ships GPT-5.5), fall back to the first surviving entry
+ *     so we never return an "all isDefault: false" list to the UI.
+ */
+export function applyCursorModelAllowlist(models: CursorModel[]): CursorModel[] {
+  const filtered = models.filter((m) => isAllowedCursorModelId(m.id));
+  if (filtered.length === 0) return filtered;
+  if (filtered.some((m) => m.isDefault)) return filtered;
+
+  const preferredIdx = filtered.findIndex((m) => m.id === CURSOR_DEFAULT_MODEL_ID);
+  const promoteIdx = preferredIdx >= 0 ? preferredIdx : 0;
+  return filtered.map((m, i) =>
+    i === promoteIdx ? { ...m, isDefault: true } : m
+  );
+}
+
 export async function listCursorModels(): Promise<CursorModel[]> {
   const r = await runAndCapture(CURSOR_CMD, ["--list-models"], {
     timeoutMs: MODELS_TIMEOUT_MS,
+    cwd: getCursorSpawnCwd(),
   });
   if (!r.ok) return [];
-  return parseCursorModels(`${r.stdout}\n${r.stderr}`);
+  return applyCursorModelAllowlist(parseCursorModels(`${r.stdout}\n${r.stderr}`));
 }

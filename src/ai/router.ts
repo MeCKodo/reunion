@@ -10,6 +10,7 @@ import {
 } from "./openai/accounts.js";
 import { streamOpenAi } from "./openai/bearer-client.js";
 import { streamCursorAgent } from "./cursor/run.js";
+import { pickAllowedCursorModelId } from "./cursor/models-allowlist.js";
 import {
   getCursorAccountState,
   type CursorAccountState,
@@ -145,9 +146,15 @@ export async function* runAi(req: RunRequest): AsyncIterable<string> {
   }
 
   if (plan.provider === "cursor") {
+    // Force every cursor-agent spawn through Reunion's allow-list. This
+    // covers three escape hatches that would otherwise leak disallowed
+    // models in: (1) callers passing a hard-coded id, (2) stale
+    // `settings.defaultModel` from before the allow-list shipped, (3) the
+    // CLI's own default (composer-2-fast) when neither caller nor settings
+    // specifies a model. See src/ai/cursor/models-allowlist.ts.
     yield* streamCursorAgent({
       prompt: req.prompt,
-      model,
+      model: pickAllowedCursorModelId(model),
       signal: req.signal,
     });
     return;

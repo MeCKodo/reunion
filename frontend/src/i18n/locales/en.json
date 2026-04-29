@@ -211,6 +211,20 @@
     "repoSourceNone": "No reliable hint — pick manually"
   },
 
+  "more": {
+    "menuLabel": "More",
+    "menuTooltip": "More actions",
+    "copySessionId": "Copy Session ID",
+    "copySessionIdHint": "Copy the raw session_id to the clipboard.",
+    "downloadJsonl": "Download raw JSONL",
+    "downloadJsonlHint": "Save the original transcript file so you can share it with a maintainer for debugging.",
+    "downloadingJsonl": "Preparing JSONL for \"{{title}}\"…",
+    "downloadJsonlSuccess": "JSONL saved · {{filename}}",
+    "downloadJsonlFailed": "JSONL download failed: {{error}}",
+    "deleteSession": "Delete session…",
+    "deleteSessionHint": "Permanently remove the transcript file and local annotations."
+  },
+
   "delete": {
     "deleteButton": "Delete",
     "deleteTooltip": "Delete this session (and its transcript file)",
