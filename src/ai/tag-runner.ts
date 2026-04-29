@@ -23,7 +23,11 @@ const FLUSH_INTERVAL_MS = 2_000;
 const MAX_CONCURRENCY_HARDCAP = 8;
 const DEFAULT_CONCURRENCY = 8;
 export const BATCH_LIMIT = 100;
-const RETRY_MAX = 1;
+// cursor-agent's cli-config.json race can survive a single retry under heavy
+// concurrency (process A and process B both hit the rename window again).
+// Allow up to 2 retries — combined with the 750ms+jitter backoff that gives
+// the OS plenty of room to finish the previous rename before we redo.
+const RETRY_MAX = 2;
 const COOLDOWN_THRESHOLD = 5;
 const COOLDOWN_MS = 5_000;
 
@@ -72,10 +76,40 @@ function looksRateLimited(message: string): boolean {
 
 function looksTransientCli(message: string): boolean {
   const lower = message.toLowerCase();
+  // Two faces of the same cursor-agent cli-config race:
+  //   1. ENOENT during rename(.tmp → cli-config.json) when another process
+  //      already won the rename.
+  //   2. Unexpected end of JSON input — a reader caught the file mid-write
+  //      before the atomic rename completed (cursor-agent itself parses
+  //      cli-config on startup, so this can come from the spawned CLI's own
+  //      stderr, not just our own JSON.parse calls).
+  // Both are transient under retry + spawn stagger.
   return (
     lower.includes("cli-config.json.tmp") ||
-    (lower.includes("enoent") && lower.includes("cli-config.json"))
+    (lower.includes("enoent") && lower.includes("cli-config.json")) ||
+    lower.includes("unexpected end of json input") ||
+    lower.includes("unexpected token") // partial JSON observed mid-write
   );
+}
+
+/**
+ * cursor-agent prints "Workspace Trust Required …" and exits non-zero when
+ * the spawn cwd isn't trusted. Reunion already passes `--trust`, but if a
+ * future CLI version stops honouring it (or a user pins an old binary that
+ * doesn't accept the flag) we want every session in the batch to fail fast
+ * with a single actionable message instead of N retries that all hit the
+ * same wall.
+ */
+function looksTrustBlocked(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("workspace trust required");
+}
+
+function rewriteForUser(message: string): string {
+  if (looksTrustBlocked(message)) {
+    return "cursor-agent rejected the spawn directory (Workspace Trust Required). Update Cursor to a version that accepts `--trust`, or set CURSOR_AGENT_CWD to a trusted directory.";
+  }
+  return message;
 }
 
 async function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
@@ -211,10 +245,14 @@ export async function runTagBatch(opts: AiTagBatchOptions): Promise<TagBatchResu
             if (signal.aborted) return;
             lastError = err;
             const msg = errorMessage(err);
+            // Trust failures are systemic (every spawn from this cwd will
+            // hit the same wall), so don't waste a retry slot on them — let
+            // the caller surface the friendly message immediately.
             const transient =
-              looksRateLimited(msg) ||
-              looksTransientCli(msg) ||
-              /\b5\d\d\b/.test(msg);
+              !looksTrustBlocked(msg) &&
+              (looksRateLimited(msg) ||
+                looksTransientCli(msg) ||
+                /\b5\d\d\b/.test(msg));
             if (attempt < RETRY_MAX && transient) {
               const base = 750 * (attempt + 1);
               const jitter = Math.floor(Math.random() * 500);
@@ -239,7 +277,13 @@ export async function runTagBatch(opts: AiTagBatchOptions): Promise<TagBatchResu
             consecutiveFailures = 0;
             cooldownUntil = Date.now() + COOLDOWN_MS;
           }
-          onProgress({ status: "fail", index: idx + 1, total, sessionKey, error: errorMessage(lastError) });
+          onProgress({
+            status: "fail",
+            index: idx + 1,
+            total,
+            sessionKey,
+            error: rewriteForUser(errorMessage(lastError)),
+          });
           continue;
         }
 

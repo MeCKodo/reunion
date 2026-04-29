@@ -22,6 +22,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { runAndCapture, runWithUrlExtraction, type UrlStreamEvent } from "../cli-spawn.js";
+import { getCursorSpawnCwd } from "./spawn-env.js";
 
 const CURSOR_CMD = (process.env.CURSOR_AGENT_CMD || "cursor-agent").trim();
 
@@ -118,6 +119,7 @@ export function invalidateCursorCache(): void {
 async function fetchCursorAccountState(): Promise<CursorAccountState> {
   const status = await runAndCapture(CURSOR_CMD, ["status"], {
     timeoutMs: STATUS_TIMEOUT_MS,
+    cwd: getCursorSpawnCwd(),
   });
 
   if (status.error && (status.error.includes("ENOENT") || status.error.includes("not found"))) {
@@ -149,6 +151,7 @@ async function fetchCursorAccountState(): Promise<CursorAccountState> {
 
   const about = await runAndCapture(CURSOR_CMD, ["about"], {
     timeoutMs: ABOUT_TIMEOUT_MS,
+    cwd: getCursorSpawnCwd(),
   });
   const aboutText = `${about.stdout}\n${about.stderr}`;
   const { email: aboutEmail, plan } = parseAbout(aboutText);
@@ -226,6 +229,7 @@ export async function* startCursorLogin(): AsyncIterable<CursorLoginEvent> {
 
   for await (const event of runWithUrlExtraction(CURSOR_CMD, ["login"], {
     env,
+    cwd: getCursorSpawnCwd(),
     timeoutMs: LOGIN_TIMEOUT_MS,
     urlPattern: /(https:\/\/(?:cursor\.com|api2\.cursor\.sh)\/[^\s'"<>]+)/g,
   })) {
@@ -265,6 +269,7 @@ export async function* startCursorLogin(): AsyncIterable<CursorLoginEvent> {
 export async function logoutCursor(): Promise<{ ok: boolean; error?: string }> {
   const r = await runAndCapture(CURSOR_CMD, ["logout"], {
     timeoutMs: LOGOUT_TIMEOUT_MS,
+    cwd: getCursorSpawnCwd(),
   });
   if (!r.ok) {
     return { ok: false, error: r.error || "logout failed" };
@@ -312,6 +317,7 @@ export function parseCursorModels(text: string): CursorModel[] {
 export async function listCursorModels(): Promise<CursorModel[]> {
   const r = await runAndCapture(CURSOR_CMD, ["--list-models"], {
     timeoutMs: MODELS_TIMEOUT_MS,
+    cwd: getCursorSpawnCwd(),
   });
   if (!r.ok) return [];
   return parseCursorModels(`${r.stdout}\n${r.stderr}`);
