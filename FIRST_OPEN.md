@@ -7,7 +7,7 @@
 打开 **终端**（启动台搜 "终端" / Terminal），把下面这行原样粘贴回车：
 
 ```bash
-curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.sh | bash
+curl -fsSL https://code.byted.org/i18n_fe/reunion/-/raw/main/scripts/install.sh | bash
 ```
 
 它会自动：
@@ -35,7 +35,7 @@ curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.s
 
 > 不知道自己是哪种？终端运行 `uname -m`：返回 `arm64` 选第一个，返回 `x86_64` 选第二个。
 
-下载页：<https://github.com/MeCKodo/reunion/releases/latest>
+下载页：<https://code.byted.org/i18n_fe/reunion/-/releases>
 
 ### 2. 安装
 
@@ -119,7 +119,7 @@ Settings 底部可切换 Smart Export / Ask AI 默认走 OpenAI 还是 Cursor。
 ## 升级到新版
 
 ```bash
-curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.sh | bash
+curl -fsSL https://code.byted.org/i18n_fe/reunion/-/raw/main/scripts/install.sh | bash
 ```
 
 跟首次安装是同一条命令，会自动覆盖旧版本。
@@ -129,7 +129,7 @@ curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.s
 **一行命令**（推荐）：
 
 ```bash
-curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/uninstall.sh | bash
+curl -fsSL https://code.byted.org/i18n_fe/reunion/-/raw/main/scripts/uninstall.sh | bash
 ```
 
 加 `--purge` 参数可一并清除数据和日志：

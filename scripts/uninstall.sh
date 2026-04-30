@@ -2,7 +2,7 @@
 # Reunion 一键卸载脚本（macOS only）
 #
 # 用法：
-#   curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/uninstall.sh | bash
+#   curl -fsSL https://code.byted.org/i18n_fe/reunion/-/raw/main/scripts/uninstall.sh | bash
 #
 # 默认：删除 /Applications/Reunion.app
 # 可选：传 --purge 一并删除数据 + 日志

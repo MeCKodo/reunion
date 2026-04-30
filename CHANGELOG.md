@@ -81,9 +81,9 @@
 - Smart Rules / Smart Skill 导出（基于 `cursor-agent`）
 - 时间过滤（7/30/60/90 天）+ 项目筛选
 
-[Unreleased]: https://github.com/MeCKodo/reunion/compare/v0.2.2...HEAD
-[0.2.2]: https://github.com/MeCKodo/reunion/compare/v0.2.1...v0.2.2
-[0.2.1]: https://github.com/MeCKodo/reunion/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/MeCKodo/reunion/compare/v0.1.1...v0.2.0
-[0.1.1]: https://github.com/MeCKodo/reunion/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/MeCKodo/reunion/releases/tag/v0.1.0
+[Unreleased]: https://code.byted.org/i18n_fe/reunion/-/compare/v0.2.2...HEAD
+[0.2.2]: https://code.byted.org/i18n_fe/reunion/-/compare/v0.2.1...v0.2.2
+[0.2.1]: https://code.byted.org/i18n_fe/reunion/-/compare/v0.2.0...v0.2.1
+[0.2.0]: https://code.byted.org/i18n_fe/reunion/-/compare/v0.1.1...v0.2.0
+[0.1.1]: https://code.byted.org/i18n_fe/reunion/-/compare/v0.1.0...v0.1.1
+[0.1.0]: https://code.byted.org/i18n_fe/reunion/-/releases/v0.1.0

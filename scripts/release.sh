@@ -4,7 +4,7 @@
 # 做的事：
 #   1. 检查 git working tree 干净 / gh 已登录 / 在正确分支
 #   2. 跑 pnpm run dist:mac 构建两个架构的 DMG
-#   3. 创建 GitHub Release（tag = v{package.json.version}）
+#   3. 创建 GitLab Release（tag = v{package.json.version}）
 #   4. 上传 DMG（arm64 + x64）+ install.sh + uninstall.sh + FIRST_OPEN.md
 #   5. 输出"群里发这条"的一行命令模板
 #
@@ -52,9 +52,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------- 前置检查 ----------
-GITHUB_REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
-if [[ -z "$GITHUB_REPO" ]]; then
-  err "gh CLI 未登录或未在 git 仓库内。请先 \`gh auth login\`。"
+GITLAB_HOST="${REUNION_GITLAB_HOST:-code.byted.org}"
+GITLAB_PROJECT="${REUNION_REPO:-i18n_fe/reunion}"
+GITLAB_API="https://${GITLAB_HOST}/api/v4/projects/$(printf '%s' "$GITLAB_PROJECT" | sed 's|/|%2F|g')"
+
+if ! command -v curl >/dev/null 2>&1; then
+  err "缺少 curl 命令"
   exit 1
 fi
 
@@ -90,9 +93,9 @@ fi
 TAG="v${NEW_VERSION}"
 
 # 检查 tag 是否已存在
-if gh release view "$TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
-  err "Release ${TAG} 已存在于 ${GITHUB_REPO} 。"
-  printf "  想覆盖？先删：gh release delete %s --yes --repo %s\n" "$TAG" "$GITHUB_REPO"
+EXISTING_REL="$(curl -fsSL "${GITLAB_API}/releases/${TAG}" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tag_name',''))" 2>/dev/null || true)"
+if [[ "$EXISTING_REL" == "$TAG" ]]; then
+  err "Release ${TAG} 已存在于 ${GITLAB_PROJECT} 。"
   printf "  或者用新版本号：bash scripts/release.sh --bump patch\n"
   exit 1
 fi
@@ -124,7 +127,8 @@ done
 ok "所有上传文件就绪"
 
 # ---------- 生成 Release notes ----------
-PREV_TAG="$(gh release list --repo "$GITHUB_REPO" --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || true)"
+PREV_TAG="$(curl -fsSL "${GITLAB_API}/releases" 2>/dev/null \
+  | python3 -c "import sys,json; r=json.load(sys.stdin); print(r[0]['tag_name'] if r else '')" 2>/dev/null || true)"
 NOTES_FILE="$(mktemp -t reunion-release-notes)"
 {
   echo "## Reunion ${TAG}"
@@ -134,7 +138,7 @@ NOTES_FILE="$(mktemp -t reunion-release-notes)"
   echo "### 一行命令安装"
   echo
   echo '```bash'
-  echo "curl -fsSL https://github.com/${GITHUB_REPO}/releases/download/${TAG}/install.sh | bash"
+  echo "curl -fsSL https://${GITLAB_HOST}/${GITLAB_PROJECT}/-/raw/main/scripts/install.sh | bash"
   echo '```'
   echo
   echo "### 下载"
@@ -168,48 +172,60 @@ fi
 # 拆两步走：
 #   1) 创建 release，先传几个 KB 级别的小文件（install.sh / uninstall.sh / FIRST_OPEN.md），秒级完成
 #   2) 大 DMG 单独 upload，每个给一行明确的"开始上传 + 实际耗时"反馈，
-#      避免一次 create 全部上传时让人误以为卡死。GitHub Releases 单文件 100MB 走国内
-#      网络通常需要 5~7 分钟，正常现象。
-step "创建 GitHub Release ${TAG}（先传小文件）"
-GH_FLAGS=(--repo "$GITHUB_REPO" --title "Reunion ${TAG}" --notes-file "$NOTES_FILE")
-if [[ "$DRAFT" -eq 1 ]]; then
-  GH_FLAGS+=(--draft)
-fi
+#      避免一次 create 全部上传时让人误以为卡死。大文件上传通常需要几分钟，正常现象。
+step "创建 GitLab Release ${TAG}"
 
-gh release create "$TAG" "${GH_FLAGS[@]}" \
-  "scripts/install.sh#install.sh" \
-  "scripts/uninstall.sh#uninstall.sh" \
-  "FIRST_OPEN.md#FIRST_OPEN.md"
-
+RELEASE_NOTES="$(cat "$NOTES_FILE")"
 rm -f "$NOTES_FILE"
 
-upload_dmg() {
+upload_to_gitlab() {
   local file="$1"
   local label="$2"
   local size
   size="$(du -h "$file" | awk '{print $1}')"
   step "上传 ${label} (${size})"
   hint "  文件: ${file}"
-  hint "  ↑ 100MB 级 DMG 在国内一般 5-8 分钟，进度条由 gh CLI 控制（无进度条不代表卡住）"
   local start_ts end_ts elapsed
   start_ts="$(date +%s)"
-  if ! gh release upload "$TAG" "${file}#${label}" --repo "$GITHUB_REPO" --clobber; then
+  UPLOAD_RESP="$(curl -fsSL --request POST --header "PRIVATE-TOKEN: ${GITLAB_TOKEN:-}" \
+    --form "file=@${file}" "${GITLAB_API}/uploads" 2>/dev/null || true)"
+  UPLOAD_URL="$(echo "$UPLOAD_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('full_path',''))" 2>/dev/null || true)"
+  if [[ -z "$UPLOAD_URL" ]]; then
     err "上传失败：${file}"
-    err "Release 已创建但 DMG 缺失。可手动 retry："
-    printf "  gh release upload %s %s#%s --repo %s --clobber\n" "$TAG" "$file" "$label" "$GITHUB_REPO"
     exit 1
   fi
+  ASSET_LINKS+=("{\"name\":\"${label}\",\"url\":\"https://${GITLAB_HOST}${UPLOAD_URL}\"}")
   end_ts="$(date +%s)"
   elapsed=$((end_ts - start_ts))
   ok "上传完成（${elapsed}s）"
 }
 
-upload_dmg "$DMG_ARM64" "Reunion ${NEW_VERSION} (Apple Silicon)"
-upload_dmg "$DMG_X64"   "Reunion ${NEW_VERSION} (Intel)"
+ASSET_LINKS=()
+upload_to_gitlab "$DMG_ARM64" "Reunion-${NEW_VERSION}-arm64.dmg"
+upload_to_gitlab "$DMG_X64"   "Reunion-${NEW_VERSION}.dmg"
+
+LINKS_JSON="$(printf '[%s]' "$(IFS=,; echo "${ASSET_LINKS[*]}")")"
+
+curl -fsSL --request POST \
+  --header "PRIVATE-TOKEN: ${GITLAB_TOKEN:-}" \
+  --header "Content-Type: application/json" \
+  --data "$(python3 -c "
+import json,sys
+print(json.dumps({
+    'tag_name': '${TAG}',
+    'name': 'Reunion ${TAG}',
+    'description': $(python3 -c "import json; print(json.dumps('''${RELEASE_NOTES}'''))"),
+    'assets': {'links': json.loads('${LINKS_JSON}')}
+}))
+")" \
+  "${GITLAB_API}/releases" >/dev/null 2>&1 || {
+    err "创建 GitLab Release 失败，请检查 GITLAB_TOKEN 环境变量"
+    exit 1
+  }
 
 # ---------- 完成 ----------
-RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/tag/${TAG}"
-INSTALL_CMD="curl -fsSL https://github.com/${GITHUB_REPO}/releases/latest/download/install.sh | bash"
+RELEASE_URL="https://${GITLAB_HOST}/${GITLAB_PROJECT}/-/releases/${TAG}"
+INSTALL_CMD="curl -fsSL https://${GITLAB_HOST}/${GITLAB_PROJECT}/-/raw/main/scripts/install.sh | bash"
 
 printf "\n%s%s═══════════════════════════════════════════════%s\n" "$C_GREEN" "$C_BOLD" "$C_RESET"
 printf "%s%s发布成功！%s\n" "$C_GREEN" "$C_BOLD" "$C_RESET"
@@ -223,4 +239,4 @@ printf "  %s%s%s\n" "$C_CYAN" "$INSTALL_CMD" "$C_RESET"
 printf "  %s---------------------------------%s\n\n" "$C_DIM" "$C_RESET"
 
 printf "  %s卸载命令：%s\n" "$C_DIM" "$C_RESET"
-printf "  %scurl -fsSL https://github.com/${GITHUB_REPO}/releases/latest/download/uninstall.sh | bash%s\n\n" "$C_DIM" "$C_RESET"
+printf "  %scurl -fsSL https://${GITLAB_HOST}/${GITLAB_PROJECT}/-/raw/main/scripts/uninstall.sh | bash%s\n\n" "$C_DIM" "$C_RESET"

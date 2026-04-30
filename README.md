@@ -8,8 +8,7 @@
   聚合本机 Cursor / Claude Code / Codex 会话的 macOS 桌面 App<br>
   跨 repo 检索、回看、标注、导出——让每一轮 AI 对话变成可复用的资产
 
-  [![GitHub release](https://img.shields.io/github/v/release/MeCKodo/reunion?style=flat-square)](https://github.com/MeCKodo/reunion/releases/latest)
-  [![macOS](https://img.shields.io/badge/macOS-12%2B-blue?style=flat-square&logo=apple)](https://github.com/MeCKodo/reunion/releases/latest)
+  [![macOS](https://img.shields.io/badge/macOS-12%2B-blue?style=flat-square&logo=apple)](https://code.byted.org/i18n_fe/reunion/-/releases)
 
   [安装](#安装) · [功能](#功能) · [Changelog](./CHANGELOG.md)
 
@@ -86,7 +85,7 @@ OpenAI ChatGPT 多账号 OAuth + Cursor Agent 单账号，token 不经手——O
 一行命令，自动检测架构、下载 DMG、装到 `/Applications`、清 Gatekeeper：
 
 ```bash
-curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.sh | bash
+curl -fsSL https://code.byted.org/i18n_fe/reunion/-/raw/main/scripts/install.sh | bash
 ```
 
 > 首次手动安装 DMG 可能需要过一次 Gatekeeper，详见 [FIRST_OPEN.md](./FIRST_OPEN.md)。
@@ -94,7 +93,7 @@ curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.s
 卸载：
 
 ```bash
-curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/uninstall.sh | bash
+curl -fsSL https://code.byted.org/i18n_fe/reunion/-/raw/main/scripts/uninstall.sh | bash
 ```
 
 ## 支持的数据源

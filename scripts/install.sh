@@ -2,14 +2,14 @@
 # Reunion 一键安装脚本（macOS only）
 #
 # 用法（同事拷到终端跑这一行）：
-#   curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.sh | bash
+#   curl -fsSL https://code.byted.org/i18n_fe/reunion/-/raw/main/scripts/install.sh | bash
 #
 # 也支持安装指定版本：
-#   REUNION_VERSION=v0.1.0 curl -fsSL https://github.com/MeCKodo/reunion/releases/latest/download/install.sh | bash
+#   REUNION_VERSION=v0.1.0 curl -fsSL https://code.byted.org/i18n_fe/reunion/-/raw/main/scripts/install.sh | bash
 #
 # 脚本做的事：
 #   1. 检测 Mac 架构（Apple Silicon / Intel）
-#   2. 从 GitHub Releases 下载对应 DMG
+#   2. 从 GitLab Releases 下载对应 DMG
 #   3. 挂载、拷贝 Reunion.app 到 /Applications
 #   4. xattr -cr 清除 quarantine（自动过 Gatekeeper）
 #   5. 卸载 DMG、清理临时文件
@@ -38,7 +38,8 @@ err()  { printf "%s✗%s %s\n" "$C_RED" "$C_RESET" "$1" >&2; }
 hint() { printf "  %s%s%s\n" "$C_DIM" "$1" "$C_RESET"; }
 
 # ---------- 配置 ----------
-GITHUB_REPO="${REUNION_REPO:-MeCKodo/reunion}"
+GITLAB_HOST="${REUNION_GITLAB_HOST:-code.byted.org}"
+GITLAB_PROJECT="${REUNION_REPO:-i18n_fe/reunion}"
 APP_NAME="Reunion"
 APP_BUNDLE="${APP_NAME}.app"
 INSTALL_DIR="/Applications"
@@ -46,7 +47,7 @@ TMP_DIR="$(mktemp -d -t reunion-install)"
 trap 'rm -rf "$TMP_DIR"; [[ -n "${MOUNTED_VOLUME:-}" ]] && hdiutil detach "$MOUNTED_VOLUME" -quiet 2>/dev/null || true' EXIT
 
 # ---------- 前置检查 ----------
-printf "\n%s%sReunion 安装器%s %s(%s)%s\n\n" "$C_BOLD" "$C_CYAN" "$C_RESET" "$C_DIM" "$GITHUB_REPO" "$C_RESET"
+printf "\n%s%sReunion 安装器%s %s(%s)%s\n\n" "$C_BOLD" "$C_CYAN" "$C_RESET" "$C_DIM" "$GITLAB_PROJECT" "$C_RESET"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   err "本脚本仅支持 macOS（当前系统：$(uname -s)）。"
@@ -88,27 +89,26 @@ step "检测到 ${ARCH_LABEL}"
 
 # ---------- 解析下载 URL ----------
 REUNION_VERSION="${REUNION_VERSION:-latest}"
-if [[ "$REUNION_VERSION" == "latest" ]]; then
-  REL_URL="https://github.com/${GITHUB_REPO}/releases/latest/download"
-else
-  REL_URL="https://github.com/${GITHUB_REPO}/releases/download/${REUNION_VERSION}"
-fi
+
+GITLAB_API="https://${GITLAB_HOST}/api/v4/projects/$(printf '%s' "$GITLAB_PROJECT" | sed 's|/|%2F|g')"
 
 # 探测最新版本的实际版本号（用于打印 + 文件名）
 if [[ "$REUNION_VERSION" == "latest" ]]; then
   step "查询最新版本..."
-  RESOLVED_VERSION="$(curl -fsSL -o /dev/null -w "%{url_effective}" \
-    "https://github.com/${GITHUB_REPO}/releases/latest" 2>/dev/null \
-    | sed -E 's|.*/tag/||' || true)"
+  RESOLVED_VERSION="$(curl -fsSL "${GITLAB_API}/releases" 2>/dev/null \
+    | python3 -c "import sys,json; r=json.load(sys.stdin); print(r[0]['tag_name'] if r else '')" 2>/dev/null || true)"
   if [[ -n "$RESOLVED_VERSION" ]]; then
     ok "最新版本：${RESOLVED_VERSION}"
   else
-    warn "无法解析最新版本号，仍尝试下载（latest 重定向）"
-    RESOLVED_VERSION="latest"
+    warn "无法解析最新版本号"
+    err "请指定版本号：REUNION_VERSION=v0.2.2 bash install.sh"
+    exit 1
   fi
 else
   RESOLVED_VERSION="$REUNION_VERSION"
 fi
+
+REL_URL="https://${GITLAB_HOST}/${GITLAB_PROJECT}/-/releases/${RESOLVED_VERSION}/downloads"
 
 # DMG 文件名格式：Reunion-{version}{suffix}
 # 例如：Reunion-0.1.0-arm64.dmg / Reunion-0.1.0.dmg
@@ -122,8 +122,8 @@ step "下载 ${DMG_NAME}"
 hint "$DMG_URL"
 if ! curl -fL --progress-bar -o "$DMG_PATH" "$DMG_URL"; then
   err "下载失败。请检查："
-  hint "1) 网络是否能访问 github.com"
-  hint "2) Release 是否存在：https://github.com/${GITHUB_REPO}/releases"
+  hint "1) 网络是否能访问 ${GITLAB_HOST}"
+  hint "2) Release 是否存在：https://${GITLAB_HOST}/${GITLAB_PROJECT}/-/releases"
   hint "3) 文件名是否对得上：${DMG_NAME}"
   exit 1
 fi
@@ -190,7 +190,7 @@ printf "  %s打开 App：%s\n" "$C_BOLD" "$C_RESET"
 printf "    open -a \"${APP_NAME}\"\n\n"
 printf "  %s或在 Launchpad 搜索 \"${APP_NAME}\"%s\n\n" "$C_DIM" "$C_RESET"
 printf "  %s卸载（一行）：%s\n" "$C_BOLD" "$C_RESET"
-printf "    curl -fsSL https://github.com/${GITHUB_REPO}/releases/latest/download/uninstall.sh | bash\n\n"
+printf "    curl -fsSL https://${GITLAB_HOST}/${GITLAB_PROJECT}/-/raw/main/scripts/uninstall.sh | bash\n\n"
 printf "  %s数据/日志位置：%s\n" "$C_DIM" "$C_RESET"
 printf "    %s~/Library/Application Support/${APP_NAME}/%s\n" "$C_DIM" "$C_RESET"
 printf "    %s~/Library/Logs/${APP_NAME}/%s\n\n" "$C_DIM" "$C_RESET"

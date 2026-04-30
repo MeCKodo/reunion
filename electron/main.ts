@@ -290,7 +290,7 @@ function buildMenu() {
         {
           label: isZh ? "打开项目仓库" : "Open Project Repository",
           click: () => {
-            shell.openExternal("https://github.com/MeCKodo/reunion");
+            shell.openExternal("https://code.byted.org/i18n_fe/reunion");
           },
         },
       ],
@@ -309,7 +309,7 @@ app.setAboutPanelOptions({
   applicationName: "Reunion",
   applicationVersion: app.getVersion(),
   copyright: "MIT License",
-  website: "https://github.com/MeCKodo/reunion",
+  website: "https://code.byted.org/i18n_fe/reunion",
 });
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
