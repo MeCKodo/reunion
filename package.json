@@ -18,6 +18,7 @@
     "dist:mac": "pnpm run build && electron-builder --mac --config electron-builder.yml",
     "dist:mac:arm64": "pnpm run build && electron-builder --mac --arm64 --config electron-builder.yml",
     "dist:mac:x64": "pnpm run build && electron-builder --mac --x64 --config electron-builder.yml",
+    "test": "node scripts/run-tests.mjs",
     "release": "bash scripts/release.sh",
     "release:patch": "bash scripts/release.sh --bump patch",
     "release:minor": "bash scripts/release.sh --bump minor",
