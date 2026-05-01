@@ -12,6 +12,7 @@ pnpm run serve   # http://127.0.0.1:9765
 
 其他命令：
 - `pnpm run index` — 手动重建索引
+- `pnpm test` — 跑后端单元 + 端到端测试（基于 `node:test` + tsx，详见 `test/`）
 - `pnpm run build` — 同时构建前端 + 后端
 - `pnpm run build:frontend` — 仅构建前端静态资源 (Vite)
 - `pnpm run build:backend` — 仅打包后端 + Electron 主进程 (esbuild)
