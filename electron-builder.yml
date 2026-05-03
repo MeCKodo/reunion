@@ -84,5 +84,60 @@ dmg:
       type: link
       path: /Applications
 
+# ---------------------------------------------------------------------------
+# Windows
+# ---------------------------------------------------------------------------
+# We ship two Windows artifacts:
+#   - NSIS installer (Reunion-Setup-<version>.exe)        — standard Windows
+#                                                          install/uninstall
+#                                                          flow with Start Menu
+#                                                          + Desktop shortcuts.
+#   - Portable      (Reunion-<version>-portable.exe)      — single .exe, no
+#                                                          install required, runs
+#                                                          from anywhere.
+# Both are unsigned (no SmartScreen-bypassing EV cert), so first launch will
+# trigger a "Windows protected your PC" dialog — users click "More info" ->
+# "Run anyway". Document this in FIRST_OPEN_WINDOWS.md.
+win:
+  icon: build/icon.ico
+  # Match the macOS strategy: ship two arch-specific installers instead of one
+  # universal one. x64 covers >99% of Windows PCs; arm64 is opt-in for Snapdragon
+  # devices and is built only when explicitly requested via `dist:win:arm64`.
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  # Don't waste a re-sign step on Windows; we have no certificate.
+  signAndEditExecutable: false
+  # Lets users run the portable exe without UAC elevation.
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ${productName}
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  uninstallDisplayName: ${productName} ${version}
+  # Wipe %APPDATA%\Reunion when the user explicitly chooses "remove app data"
+  # in the uninstaller. Default uninstall keeps user data so re-install is
+  # idempotent.
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: ${productName}-${version}-${arch}-portable.${ext}
+  # Portable build also writes user data into %APPDATA%\Reunion so it stays
+  # consistent with the installed version (instead of next-to-the-exe). This
+  # matches Electron's app.getPath('userData') default.
+  unpackDirName: false
+
 # Disable update server probing for the local-only build.
 publish: null

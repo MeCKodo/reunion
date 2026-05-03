@@ -1,4 +1,5 @@
 import path from "node:path";
+import os from "node:os";
 
 // PROJECT_ROOT defaults to process.cwd() so the CLI workflow keeps working.
 // In an Electron build the renderer/main process injects absolute overrides
@@ -35,7 +36,9 @@ export const LEGACY_STATIC_DIR = LEGACY_STATIC_OVERRIDE
   : path.join(PROJECT_ROOT, "static");
 export const LEGACY_STATIC_FILE = path.join(LEGACY_STATIC_DIR, "index.html");
 
-const HOME = process.env.HOME || "";
+// `process.env.HOME` is empty on Windows; `os.homedir()` resolves to
+// `C:\Users\<name>` there and to `$HOME` on macOS / Linux.
+const HOME = os.homedir();
 
 export const DEFAULT_CURSOR_ROOT = path.join(HOME, ".cursor", "projects");
 export const DEFAULT_CLAUDE_ROOT = path.join(HOME, ".claude", "projects");
@@ -49,14 +52,36 @@ export const DEFAULT_SOURCE_ROOTS = {
 // Kept for backward compatibility with callers that only know about Cursor.
 export const DEFAULT_SOURCE_ROOT = DEFAULT_CURSOR_ROOT;
 
-export const CURSOR_WORKSPACE_STORAGE = path.join(
-  HOME,
-  "Library",
-  "Application Support",
-  "Cursor",
-  "User",
-  "workspaceStorage"
-);
+// Cursor stores workspaceStorage inside its Electron user-data directory, which
+// follows the OS convention (Cursor is built on Code-OSS so the layout matches
+// VS Code one-for-one):
+//   - macOS:   ~/Library/Application Support/Cursor/User/workspaceStorage
+//   - Windows: %APPDATA%\Cursor\User\workspaceStorage   (typically Roaming)
+//   - Linux:   ~/.config/Cursor/User/workspaceStorage
+function resolveCursorWorkspaceStorage(): string {
+  switch (process.platform) {
+    case "darwin":
+      return path.join(
+        HOME,
+        "Library",
+        "Application Support",
+        "Cursor",
+        "User",
+        "workspaceStorage"
+      );
+    case "win32": {
+      const appData = process.env.APPDATA || path.join(HOME, "AppData", "Roaming");
+      return path.join(appData, "Cursor", "User", "workspaceStorage");
+    }
+    default: {
+      const xdgConfig =
+        process.env.XDG_CONFIG_HOME || path.join(HOME, ".config");
+      return path.join(xdgConfig, "Cursor", "User", "workspaceStorage");
+    }
+  }
+}
+
+export const CURSOR_WORKSPACE_STORAGE = resolveCursorWorkspaceStorage();
 
 export const DEFAULT_PORT = 9765;
 export const DEFAULT_HOST = "127.0.0.1";
