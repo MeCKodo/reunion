@@ -11,13 +11,16 @@
 //
 // Resolution order:
 //   1. CURSOR_AGENT_CWD                  — explicit override for power users
-//   2. REUNION_DATA_DIR                  — set by electron/bootstrap.cjs;
-//                                          always inside ~/Library/Application
-//                                          Support/Reunion when packaged
+//   2. REUNION_DATA_DIR                  — set by electron/bootstrap.cjs to the
+//                                          OS-conventional userData dir
+//                                          (~/Library/Application Support on
+//                                          macOS, %APPDATA% on Windows,
+//                                          ~/.config on Linux)
 //   3. os.homedir()                      — last-resort fallback that should
 //                                          always exist and be user-owned
 
 import os from "node:os";
+import path from "node:path";
 import { existsSync, statSync } from "node:fs";
 
 let cached: string | null = null;
@@ -40,8 +43,9 @@ export function getCursorSpawnCwd(): string {
       // unreadable path → try the next candidate
     }
   }
-  // Should be unreachable on any sane macOS install but stay defensive.
-  cached = "/";
+  // Should be unreachable on a healthy install but stay defensive. Use the
+  // platform's filesystem root: `/` on POSIX, drive root (e.g. `C:\`) on Win32.
+  cached = path.parse(os.homedir() || ".").root || ".";
   return cached;
 }
 

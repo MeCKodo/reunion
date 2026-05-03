@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Windows 打包支持**：electron-builder 新增 `win:` 目标，同时产出 NSIS 安装包（per-user，不需要管理员）和 portable exe；`pnpm run dist:win` / `dist:win:x64` / `dist:all` 一键出包；`build/icon.ico` 由 `pnpm run build:icons` 从 `build/icon.png` 自动生成。
+- **Windows 一键安装/卸载脚本**：`scripts/install.ps1`、`scripts/uninstall.ps1` 走 `iwr | iex` 模式，自动检测架构、解 SmartScreen Mark-of-the-Web、per-user 静默安装到 `%LOCALAPPDATA%\Programs\Reunion`。`REUNION_PORTABLE=1` 走 portable 模式落到桌面。
+- **跨平台 CI 流水线**：`.github/workflows/release.yml` 在 macOS + Windows runner 上并行打包，tag push（`v*`）后自动创建 GitHub Release 并上传所有产物 + 安装/卸载脚本。
+- **`FIRST_OPEN_WINDOWS.md`**：给 Windows 同事看的安装、SmartScreen 处理、数据/日志路径、cursor-agent / codex 配置说明。
+
+### Changed
+
+- **`scripts/release.sh`**：自动检测 `release/` 下的 Windows 产物（NSIS / portable）一并上传，release notes 同时包含 macOS + Windows 安装命令；新增 `--no-win` 参数可强制跳过 Windows 上传。
+- **`src/config.ts`**：`HOME` 改用 `os.homedir()`（兼容 Windows 没有 `$HOME` 的情况）；`CURSOR_WORKSPACE_STORAGE` 按 `process.platform` 分支，Windows 走 `%APPDATA%\Cursor\User\workspaceStorage`，Linux 走 `$XDG_CONFIG_HOME/Cursor/User/workspaceStorage`。
+
 ## [0.2.2]
 
 ### Added

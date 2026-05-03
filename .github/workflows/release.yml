@@ -1,0 +1,235 @@
+name: Release
+
+# Trigger:
+#   - 推送 v* tag → 真发版（macOS arm64+x64 DMG / Windows x64 NSIS+portable）
+#   - 手动 dispatch → 同样构建，可勾选「不创建 release」纯产物模式
+#
+# 设计要点：
+#   1. macOS / Windows 各跑一个 job，并行出 artifact，避免本地 wine 不稳定。
+#   2. 两边都跑 electron-builder --publish never，只产出文件，不让 builder
+#      自己上传——release 这步统一交给最后的 release job 处理。
+#   3. macOS 走 ad-hoc codesign（scripts/after-pack.cjs），Windows 不签名。
+#      这个仓库目前没有付费签名证书。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create GitHub Release after building"
+        type: boolean
+        default: true
+      draft:
+        description: "Create as draft release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    name: Build macOS (arm64 + x64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (frontend + backend)
+        run: pnpm run build
+
+      - name: Package macOS DMG (arm64 + x64)
+        run: pnpm exec electron-builder --mac --x64 --arm64 --config electron-builder.yml --publish never
+        env:
+          # electron-builder needs a token only when publishing; keep it set so
+          # any code path that probes auth doesn't crash the run.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 跳过自动发布
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reunion-macos
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/Reunion-*.dmg
+            release/Reunion-*-mac.zip
+
+  build-win:
+    name: Build Windows (x64)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate Windows icon
+        run: pnpm run build:icons
+
+      - name: Build (frontend + backend)
+        run: pnpm run build
+
+      - name: Package Windows installer + portable (x64)
+        run: pnpm exec electron-builder --win --x64 --config electron-builder.yml --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reunion-windows
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/Reunion-Setup-*.exe
+            release/Reunion-*-portable.exe
+
+  release:
+    name: Create GitHub Release
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+    # 只在 tag push 或 dispatch 且勾了 create_release 时跑
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: reunion-macos
+          path: release
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: reunion-windows
+          path: release
+
+      - name: Resolve version + previous tag
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v$(node -p "require('./package.json').version")"
+          fi
+          PREV_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || true)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
+          GITHUB_REPO="${GITHUB_REPOSITORY}"
+          {
+            echo "## Reunion ${TAG}"
+            echo
+            echo "桌面 App，聚合本地 Cursor / Claude Code / Codex 对话历史。"
+            echo
+            echo "### 一行命令安装"
+            echo
+            echo "**macOS:**"
+            echo
+            echo '```bash'
+            echo "curl -fsSL https://github.com/${GITHUB_REPO}/releases/download/${TAG}/install.sh | bash"
+            echo '```'
+            echo
+            echo "**Windows (PowerShell):**"
+            echo
+            echo '```powershell'
+            echo "iwr -useb https://github.com/${GITHUB_REPO}/releases/download/${TAG}/install.ps1 | iex"
+            echo '```'
+            echo
+            echo "### 下载"
+            echo
+            echo "**macOS**"
+            echo
+            echo "- Apple Silicon: \`Reunion-${VERSION}-arm64.dmg\`"
+            echo "- Intel: \`Reunion-${VERSION}.dmg\`"
+            echo
+            echo "**Windows**"
+            echo
+            echo "- 安装包 (x64): \`Reunion-Setup-${VERSION}-x64.exe\`"
+            echo "- 便携版 (x64): \`Reunion-${VERSION}-x64-portable.exe\`"
+            echo
+            echo "### 系统要求"
+            echo
+            echo "- macOS 12 (Monterey) 或更新版本"
+            echo "- Windows 10 1809 或更新版本（64 位）"
+            echo
+            if [[ -n "$PREV_TAG" && "$PREV_TAG" != "$TAG" ]]; then
+              echo "### Changes since ${PREV_TAG}"
+              echo
+              git log --pretty=format:'- %s' "${PREV_TAG}..HEAD" -- . ':(exclude)release' ':(exclude)dist' 2>/dev/null | head -30 || true
+            fi
+          } > release-notes.md
+          echo "path=release-notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          DRAFT_FLAG=""
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.draft }}" == "true" ]]; then
+            DRAFT_FLAG="--draft"
+          fi
+          # 小文件先传
+          gh release create "$TAG" $DRAFT_FLAG \
+            --title "Reunion ${TAG}" \
+            --notes-file release-notes.md \
+            "scripts/install.sh#install.sh" \
+            "scripts/uninstall.sh#uninstall.sh" \
+            "scripts/install.ps1#install.ps1" \
+            "scripts/uninstall.ps1#uninstall.ps1" \
+            "FIRST_OPEN.md#FIRST_OPEN.md"
+
+          if [[ -f FIRST_OPEN_WINDOWS.md ]]; then
+            gh release upload "$TAG" "FIRST_OPEN_WINDOWS.md#FIRST_OPEN_WINDOWS.md" --clobber
+          fi
+
+          # 大文件每个单独传，方便看进度 + 失败重试
+          shopt -s nullglob
+          for f in release/Reunion-*.dmg release/Reunion-Setup-*.exe release/Reunion-*-portable.exe; do
+            echo "::group::upload $f"
+            gh release upload "$TAG" "$f" --clobber
+            echo "::endgroup::"
+          done

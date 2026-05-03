@@ -15,9 +15,12 @@ pnpm run serve   # http://127.0.0.1:9765
 - `pnpm run build` — 同时构建前端 + 后端
 - `pnpm run build:frontend` — 仅构建前端静态资源 (Vite)
 - `pnpm run build:backend` — 仅打包后端 + Electron 主进程 (esbuild)
+- `pnpm run build:icons` — 从 `build/icon.png` 重新生成 `build/icon.ico`（Windows 打包用）
 - `pnpm start` — 用编译后的 JS 启动服务
 - `pnpm run electron` — 本地启动 Electron App
 - `pnpm run dist:mac` — 出 macOS DMG（详见 `README.md`）
+- `pnpm run dist:win` / `dist:win:x64` / `dist:win:arm64` — 出 Windows NSIS 安装包 + portable exe（在 Mac 上跑需要 wine，推荐直接用 GitHub Actions `Release` workflow）
+- `pnpm run dist:all` — 同时出 macOS + Windows 产物（一般在 CI 上跑）
 
 ## 项目结构
 
@@ -63,7 +66,10 @@ data/
 
 - **后端**：纯 `node:http`，无 Express/Koa，单文件 `src/server.ts`，用 `tsx` 直接运行
 - **前端**：React SPA，Vite 构建，产物在 `frontend/dist/`
-- **桌面端**：Electron 41 + electron-builder 打 macOS DMG（参见 `electron/`、`scripts/build-electron.mjs`）
+- **桌面端**：Electron 41 + electron-builder
+  - macOS：DMG（arm64 + x64），ad-hoc 签名（`scripts/after-pack.cjs`）
+  - Windows：NSIS 安装包 + portable exe（x64），未签名（首次启动会有 SmartScreen 提示）
+  - 跨平台 CI：`.github/workflows/release.yml`（macOS + Windows runner 各打一份）
 - **服务优先级**：先尝试 `frontend/dist/`，不存在则回退到 `static/index.html`
 - **数据源**（三家 Agent 并列）：
   - Cursor：`~/.cursor/projects/*/agent-transcripts/`（旧 `*.txt` + 新 `<session-id>/<session-id>.jsonl`）
@@ -76,7 +82,8 @@ data/
 | 模式 | 数据 | 日志 |
 | --- | --- | --- |
 | 开发模式（`pnpm run serve`） | `data/`（项目根目录） | stdout |
-| 打包后（`Reunion.app`） | `~/Library/Application Support/Reunion/data/` | `~/Library/Logs/Reunion/main.log` |
+| macOS 打包后（`Reunion.app`） | `~/Library/Application Support/Reunion/data/` | `~/Library/Logs/Reunion/main.log` |
+| Windows 打包后（`Reunion.exe`） | `%APPDATA%\Reunion\data\` | `%APPDATA%\Reunion\logs\main.log` |
 
 ## API
 
@@ -115,5 +122,7 @@ data/
 
 - [`README.md`](./README.md) — 产品介绍 + 安装
 - [`CHANGELOG.md`](./CHANGELOG.md) — 版本变更记录
-- [`FIRST_OPEN.md`](./FIRST_OPEN.md) — 同事拿到 DMG 后的安装/卸载/排错说明
+- [`FIRST_OPEN.md`](./FIRST_OPEN.md) — macOS 拿到 DMG 后的安装/卸载/排错说明
+- [`FIRST_OPEN_WINDOWS.md`](./FIRST_OPEN_WINDOWS.md) — Windows 拿到 exe 后的安装/卸载/排错说明
 - [`electron-builder.yml`](./electron-builder.yml) — 打包配置（含未来升级付费签名的注释）
+- [`.github/workflows/release.yml`](./.github/workflows/release.yml) — 跨平台 CI 打包发版流水线
