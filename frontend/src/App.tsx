@@ -8,7 +8,9 @@ import { Sidebar } from "@/components/sidebar/Sidebar";
 import { SessionView } from "@/components/session-view/SessionView";
 import { useToast } from "@/components/ui/toast";
 import { ExportTargetDialog } from "@/components/session-view/ExportTargetDialog";
+import { ModeSwitcher } from "@/components/mode/ModeSwitcher";
 import { useAnnotations } from "@/hooks/useAnnotations";
+import { useAppMode } from "@/hooks/useAppMode";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import {
   deleteSession,
@@ -132,6 +134,23 @@ export default function App() {
     ) => pushToast(message, tone, timeoutMs),
     [pushToast]
   );
+
+  // ── App mode (personal vs team data source) ───────────────────────
+  // The active mode drives `capabilities`, which gates UI for local-only
+  // actions (delete, download JSONL, smart export, annotations, AI tagger).
+  // It also tells us whether to refetch search results after the user
+  // flips the switch, since the data source changes underneath.
+  const {
+    state: appModeState,
+    loaded: appModeLoaded,
+    apply: applyAppMode,
+  } = useAppMode();
+  const capabilities = appModeState.capabilities;
+  // The build-time edition decides whether the team-mode UI is allowed to
+  // show up at all. We hide the switcher until /api/mode has responded so
+  // a slow first response never briefly flashes it on a personal-edition
+  // build (where appModeState.edition would be wrong for ~1 RTT otherwise).
+  const showModeSwitcher = appModeLoaded && appModeState.edition === "team";
 
   // ── Extracted business logic (annotations) ─────────────────────────
   const {
@@ -888,6 +907,36 @@ export default function App() {
         >
           <Sidebar
             className="h-full w-full"
+            capabilities={capabilities}
+            edition={appModeLoaded ? appModeState.edition : undefined}
+            footerSlot={
+              showModeSwitcher ? (
+              <ModeSwitcher
+                state={appModeState}
+                onApply={applyAppMode}
+                onSuccess={(nextMode) => {
+                  notify(
+                    t("mode.switched", {
+                      mode:
+                        nextMode === "team"
+                          ? t("mode.teamModeBadge")
+                          : t("mode.personalModeBadge"),
+                    }),
+                    "success"
+                  );
+                  // Re-load repo list + sources + search results so the UI
+                  // reflects the new data source. The provider on the backend
+                  // already swapped; we just have to refetch.
+                  loadRepoOptions().catch(() => undefined);
+                  loadSourceSummaries().catch(() => undefined);
+                  runSearch().catch((error) => notify(String(error), "error"));
+                }}
+                onError={(message) =>
+                  notify(t("mode.switchFailed", { error: message }), "error")
+                }
+              />
+              ) : null
+            }
             query={query}
             setQuery={setQuery}
             onSubmit={() => void runSearch()}
@@ -935,6 +984,7 @@ export default function App() {
         <SessionView
           className="flex-1 min-w-0"
           onOpenSidebar={() => setSidebarOpen(true)}
+          capabilities={capabilities}
           detail={detail}
           detailLoading={detailLoading}
           messageRoleFilter={messageRoleFilter}

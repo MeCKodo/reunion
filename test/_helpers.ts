@@ -147,6 +147,7 @@ interface BuildSessionOpts {
   sessionId?: string;
   title?: string;
   filePath?: string;
+  provider?: Session["provider"];
   startedAt?: number;
   updatedAt?: number;
   content?: string;
@@ -171,6 +172,7 @@ export function buildSession(opts: BuildSessionOpts = {}): Session {
     repoPath: opts.repoPath,
     title: opts.title || "Test session",
     filePath: opts.filePath || `/tmp/fake/${sessionId}.jsonl`,
+    provider: opts.provider || "local",
     startedAt,
     updatedAt,
     sizeBytes: opts.sizeBytes ?? 1234,

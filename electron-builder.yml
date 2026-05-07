@@ -3,6 +3,10 @@ productName: Reunion
 copyright: Copyright (c) 2026 MeCKodo
 asar: true
 
+# Custom artifact filename keeps team-edition outputs distinguishable from
+# personal-edition (`Reunion Personal-...`) when both land in `release/`.
+artifactName: ${productName}-${version}-${arch}.${ext}
+
 directories:
   output: release
   buildResources: build
@@ -27,7 +31,7 @@ files:
   - "!static/**/*"
   - "!release/**/*"
   - "!**/*.tsbuildinfo"
-  - "!{tsconfig*.json,electron-builder.yml,*.html,*.py}"
+  - "!{tsconfig*.json,electron-builder.yml,electron-builder.personal.yml,*.html,*.py}"
   - "!{AGENTS.md,README.md,QUICK_START_DMG.md,FIRST_OPEN.md}"
   - "!.cursor/**/*"
   - "!.git/**/*"

@@ -35,6 +35,13 @@ interface SidebarSearchProps {
    */
   filteredResults: SearchResult[];
   onAiTaggerError?: (message: string) => void;
+
+  /** When false (team mode), the star/tag chips and AI tagger are hidden —
+   *  annotations are an on-disk concept owned by the personal-mode index. */
+  canAnnotate?: boolean;
+  /** When false (team mode), the AI tagger button is hidden even if
+   *  annotations are enabled. */
+  canAiTag?: boolean;
 }
 
 function SidebarSearch({
@@ -56,6 +63,8 @@ function SidebarSearch({
   setTagPickerOpen,
   filteredResults,
   onAiTaggerError,
+  canAnnotate = true,
+  canAiTag = true,
 }: SidebarSearchProps) {
   const { t } = useTranslation();
   const hasAdvancedFilter = selectedRepo !== "all" || days !== "30";
@@ -97,27 +106,33 @@ function SidebarSearch({
           {t("sidebar.all")}
         </ChipButton>
 
-        <ChipButton
-          active={onlyStarred}
-          onClick={() => setOnlyStarred((v) => !v)}
-          icon={<Star className={cn("h-3 w-3", onlyStarred && "fill-current")} />}
-        >
-          {t("sidebar.starred")}
-        </ChipButton>
+        {canAnnotate ? (
+          <ChipButton
+            active={onlyStarred}
+            onClick={() => setOnlyStarred((v) => !v)}
+            icon={<Star className={cn("h-3 w-3", onlyStarred && "fill-current")} />}
+          >
+            {t("sidebar.starred")}
+          </ChipButton>
+        ) : null}
 
-        <TagFilterPopover
-          allTags={allTags}
-          selectedTags={selectedTags}
-          setSelectedTags={setSelectedTags}
-          open={tagPickerOpen}
-          setOpen={setTagPickerOpen}
-        />
+        {canAnnotate ? (
+          <TagFilterPopover
+            allTags={allTags}
+            selectedTags={selectedTags}
+            setSelectedTags={setSelectedTags}
+            open={tagPickerOpen}
+            setOpen={setTagPickerOpen}
+          />
+        ) : null}
 
-        <AiTaggerButton
-          filteredResults={filteredResults}
-          allTags={allTags}
-          onError={onAiTaggerError}
-        />
+        {canAnnotate && canAiTag ? (
+          <AiTaggerButton
+            filteredResults={filteredResults}
+            allTags={allTags}
+            onError={onAiTaggerError}
+          />
+        ) : null}
 
         <Popover>
           <PopoverTrigger asChild>

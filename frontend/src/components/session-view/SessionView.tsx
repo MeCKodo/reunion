@@ -15,10 +15,12 @@ import type {
   SubagentDetail,
   TimelineEvent,
 } from "@/lib/types";
+import type { ProviderCapabilities } from "@/lib/mode";
 import type { ToolBucket } from "@/lib/transcript";
 import { MessageList } from "./MessageList";
 import { SessionHeader } from "./SessionHeader";
 import { ViewToolbar } from "./ViewToolbar";
+import { SessionBanner } from "@/components/mode/SessionBanner";
 
 interface SessionViewProps {
   detail: SessionDetail | null;
@@ -59,6 +61,11 @@ interface SessionViewProps {
   className?: string;
 
   onOpenSidebar?: () => void;
+
+  /** Provider capability flags; forwarded to `SessionHeader` so destructive /
+   *  AI / file-system actions hide themselves in team mode. Optional so legacy
+   *  callers fall back to the fully-enabled local UI. */
+  capabilities?: ProviderCapabilities;
 }
 
 function SessionView(props: SessionViewProps) {
@@ -94,6 +101,7 @@ function SessionView(props: SessionViewProps) {
     statusText,
     className,
     onOpenSidebar,
+    capabilities,
   } = props;
 
   // Wire ⌘F / Ctrl-F to the in-session search box. We mount the listener on
@@ -193,7 +201,15 @@ function SessionView(props: SessionViewProps) {
         setTagInput={setTagInput}
         onAddTag={onAddTag}
         onRemoveTag={onRemoveTag}
+        capabilities={capabilities}
       />
+
+      {/* Banner just below the header so it's always visible regardless of
+          how far the user has scrolled in the conversation. Only renders for
+          remote sessions or when the backend supplied a `hint`. */}
+      <div className="px-4 sm:px-6 pt-2">
+        <SessionBanner detail={detail} />
+      </div>
 
       <ViewToolbar
         messageRoleFilter={messageRoleFilter}

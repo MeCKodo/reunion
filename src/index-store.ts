@@ -159,6 +159,7 @@ export async function buildIndex(
           repoPath: entry.repoPath,
           title,
           filePath: entry.filePath,
+          provider: "local",
           startedAt: sStart,
           updatedAt: sEnd,
           sizeBytes: entry.size,
@@ -240,6 +241,9 @@ export async function loadIndex(): Promise<IndexData> {
       startedAt: session.startedAt || session.updatedAt,
       title: session.title || "Untitled session",
       segments: Array.isArray(session.segments) ? session.segments : [],
+      // Index files written by older versions don't carry the provider tag;
+      // anything in chat_index.json was scanned from disk so default to local.
+      provider: session.provider || "local",
     }));
     inMemoryIndex = parsed;
     return parsed;

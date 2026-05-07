@@ -3,21 +3,36 @@
 #
 # 做的事：
 #   1. 检查 git working tree 干净 / gh 已登录 / 在正确分支
-#   2. 跑 pnpm run dist:mac 构建两个架构的 DMG
+#   2. 依次构建两个 edition × 两个 arch 的 DMG（团队版 + 个人版）
 #   3. 创建 GitLab Release（tag = v{package.json.version}）
-#   4. 上传 DMG（arm64 + x64）+ install.sh + uninstall.sh + FIRST_OPEN.md
+#   4. 上传 4 份 DMG + install.sh + uninstall.sh + FIRST_OPEN.md
 #   5. 输出"群里发这条"的一行命令模板
+#
+# 团队版 secret 来自 ~/.reunion/release.env（chmod 600），格式：
+#   export REUNION_BUILD_INGEST_URL="https://ingest.your-team.example"
+#   export REUNION_BUILD_INGEST_TOKEN="..."
+# 没有这个文件时只能构建个人版（仍可发版）。
 #
 # 用法：
 #   bash scripts/release.sh           # 用 package.json 当前 version
 #   bash scripts/release.sh 0.1.1     # 临时指定版本号（不改 package.json）
 #   bash scripts/release.sh --bump patch    # 自动 bump patch（0.1.0 -> 0.1.1）
 #   bash scripts/release.sh --draft   # 创建草稿 release，不公开
-#   bash scripts/release.sh --skip-build    # 复用 release/ 现有产物，跳过 dist:mac
+#   bash scripts/release.sh --skip-build    # 复用 release/ 现有产物
+#   bash scripts/release.sh --personal-only # 只构建并发布个人版（无团队 secret 时也可用）
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+# 团队版 secret 注入。release.env 不进 git；不存在也不报错（之后会按
+# --personal-only / 缺 secret 时的逻辑处理）。
+if [[ -f "$HOME/.reunion/release.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$HOME/.reunion/release.env"
+  set +a
+fi
 
 if [[ -t 1 ]]; then
   C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
@@ -34,15 +49,17 @@ hint() { printf "  %s%s%s\n" "$C_DIM" "$1" "$C_RESET"; }
 # ---------- 解析参数 ----------
 DRAFT=0
 SKIP_BUILD=0
+PERSONAL_ONLY=0
 EXPLICIT_VERSION=""
 BUMP=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --draft) DRAFT=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
+    --personal-only) PERSONAL_ONLY=1; shift ;;
     --bump) BUMP="${2:-patch}"; shift 2 ;;
     --help|-h)
-      sed -n '2,18p' "$0"
+      sed -n '2,28p' "$0"
       exit 0 ;;
     -*)
       err "未知参数：$1"; exit 1 ;;
@@ -50,6 +67,20 @@ while [[ $# -gt 0 ]]; do
       EXPLICIT_VERSION="$1"; shift ;;
   esac
 done
+
+# 决定本次要构建哪些 edition。团队版需要 ingest URL+TOKEN；缺一不可时
+# 自动降级到个人版-only 并提示，避免误把空 token 打进 team-edition 包。
+BUILD_TEAM=1
+if [[ "$PERSONAL_ONLY" -eq 1 ]]; then
+  BUILD_TEAM=0
+fi
+if [[ "$BUILD_TEAM" -eq 1 ]]; then
+  if [[ -z "${REUNION_BUILD_INGEST_URL:-}" || -z "${REUNION_BUILD_INGEST_TOKEN:-}" ]]; then
+    warn "未检测到 REUNION_BUILD_INGEST_URL / REUNION_BUILD_INGEST_TOKEN（建议放到 ~/.reunion/release.env）"
+    warn "本次只发布【个人版】。如需发布团队版，请补全 secret 后重跑。"
+    BUILD_TEAM=0
+  fi
+fi
 
 # ---------- 前置检查 ----------
 GITLAB_HOST="${REUNION_GITLAB_HOST:-code.byted.org}"
@@ -101,24 +132,50 @@ if [[ "$EXISTING_REL" == "$TAG" ]]; then
 fi
 
 # ---------- 构建 ----------
-DMG_ARM64="release/Reunion-${NEW_VERSION}-arm64.dmg"
-DMG_X64="release/Reunion-${NEW_VERSION}.dmg"
+# 由于 electron-builder 用了 `artifactName: ${productName}-${version}-${arch}.${ext}`，
+# 两个 edition 的 DMG 文件名都带 arch 后缀，且 productName 不同所以不会冲突。
+TEAM_DMG_ARM64="release/Reunion-${NEW_VERSION}-arm64.dmg"
+TEAM_DMG_X64="release/Reunion-${NEW_VERSION}-x64.dmg"
+PERSONAL_DMG_ARM64="release/Reunion Personal-${NEW_VERSION}-arm64.dmg"
+PERSONAL_DMG_X64="release/Reunion Personal-${NEW_VERSION}-x64.dmg"
+
+EXPECTED_DMGS=("$PERSONAL_DMG_ARM64" "$PERSONAL_DMG_X64")
+if [[ "$BUILD_TEAM" -eq 1 ]]; then
+  EXPECTED_DMGS=("$TEAM_DMG_ARM64" "$TEAM_DMG_X64" "${EXPECTED_DMGS[@]}")
+fi
 
 if [[ "$SKIP_BUILD" -eq 1 ]]; then
   step "跳过构建（--skip-build）"
-  for f in "$DMG_ARM64" "$DMG_X64"; do
+  for f in "${EXPECTED_DMGS[@]}"; do
     if [[ ! -f "$f" ]]; then
       err "找不到 $f，请去掉 --skip-build 重新构建"
       exit 1
     fi
   done
 else
-  step "构建 macOS DMG（arm64 + x64）"
   rm -rf release dist
-  pnpm run dist:mac
+  if [[ "$BUILD_TEAM" -eq 1 ]]; then
+    step "构建团队版 DMG（arm64 + x64）"
+    pnpm run dist:mac:team
+    # 把团队版产物挪到子目录，避免下一轮 electron-builder 清空 release/ 时被删
+    mkdir -p release/_team
+    mv "$TEAM_DMG_ARM64" "release/_team/$(basename "$TEAM_DMG_ARM64")"
+    mv "$TEAM_DMG_X64"   "release/_team/$(basename "$TEAM_DMG_X64")"
+  fi
+
+  step "构建个人版 DMG（arm64 + x64）"
+  rm -rf dist  # 强制重打 bundle，避免 esbuild 缓存让 personal 用上 team 的 define
+  pnpm run dist:mac:personal
+
+  if [[ "$BUILD_TEAM" -eq 1 ]]; then
+    # 把团队版搬回 release/ 顶层，统一上传逻辑
+    mv "release/_team/$(basename "$TEAM_DMG_ARM64")" "$TEAM_DMG_ARM64"
+    mv "release/_team/$(basename "$TEAM_DMG_X64")"   "$TEAM_DMG_X64"
+    rmdir release/_team
+  fi
 fi
 
-for f in "$DMG_ARM64" "$DMG_X64" scripts/install.sh scripts/uninstall.sh FIRST_OPEN.md; do
+for f in "${EXPECTED_DMGS[@]}" scripts/install.sh scripts/uninstall.sh FIRST_OPEN.md; do
   if [[ ! -f "$f" ]]; then
     err "缺少文件：$f"
     exit 1
@@ -143,9 +200,22 @@ NOTES_FILE="$(mktemp -t reunion-release-notes)"
   echo
   echo "### 下载"
   echo
-  echo "- **Apple Silicon (M1/M2/M3/M4)**: \`Reunion-${NEW_VERSION}-arm64.dmg\`"
-  echo "- **Intel**: \`Reunion-${NEW_VERSION}.dmg\`"
+  if [[ "$BUILD_TEAM" -eq 1 ]]; then
+    echo "**团队版（部门内部用，可切换团队/个人模式）**"
+    echo
+    echo "- Apple Silicon (M1/M2/M3/M4): \`Reunion-${NEW_VERSION}-arm64.dmg\`"
+    echo "- Intel: \`Reunion-${NEW_VERSION}-x64.dmg\`"
+    echo
+  fi
+  echo "**个人版（外部分发，仅本地数据源）**"
   echo
+  echo "- Apple Silicon (M1/M2/M3/M4): \`Reunion Personal-${NEW_VERSION}-arm64.dmg\`"
+  echo "- Intel: \`Reunion Personal-${NEW_VERSION}-x64.dmg\`"
+  echo
+  if [[ "$BUILD_TEAM" -eq 1 ]]; then
+    echo "两版可并存安装（不同 appId / Dock 名）。如不确定选哪个，先装团队版。"
+    echo
+  fi
   echo "### 系统要求"
   echo
   echo "- macOS 12 (Monterey) 或更新版本"
@@ -201,8 +271,12 @@ upload_to_gitlab() {
 }
 
 ASSET_LINKS=()
-upload_to_gitlab "$DMG_ARM64" "Reunion-${NEW_VERSION}-arm64.dmg"
-upload_to_gitlab "$DMG_X64"   "Reunion-${NEW_VERSION}.dmg"
+if [[ "$BUILD_TEAM" -eq 1 ]]; then
+  upload_to_gitlab "$TEAM_DMG_ARM64" "Reunion-${NEW_VERSION}-arm64.dmg"
+  upload_to_gitlab "$TEAM_DMG_X64"   "Reunion-${NEW_VERSION}-x64.dmg"
+fi
+upload_to_gitlab "$PERSONAL_DMG_ARM64" "Reunion Personal-${NEW_VERSION}-arm64.dmg"
+upload_to_gitlab "$PERSONAL_DMG_X64"   "Reunion Personal-${NEW_VERSION}-x64.dmg"
 
 LINKS_JSON="$(printf '[%s]' "$(IFS=,; echo "${ASSET_LINKS[*]}")")"
 

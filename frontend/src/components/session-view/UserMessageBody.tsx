@@ -2,7 +2,6 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
   Bell,
-  ChevronRight,
   FileText,
   Image as ImageIcon,
   Sparkles,
@@ -20,6 +19,8 @@ import {
   extractInlineImageRefs,
 } from "@/lib/asset";
 import i18n from "@/i18n";
+import { InjectionChip } from "./InjectionChip";
+import { TimestampBadge } from "./TimestampBadge";
 
 /**
  * Cursor / Claude inject several XML-shaped wrappers into the *first*
@@ -46,6 +47,8 @@ const INJECTION_TAGS = new Set([
 ]);
 
 const STRIP_WRAPPERS = new Set(["user_query"]);
+
+const TIMESTAMP_TAG = "timestamp";
 
 const TAG_LABEL_KEYS: Record<string, string> = {
   manually_attached_skills: "user.manuallyAttachedSkills",
@@ -90,7 +93,12 @@ interface TextSegment {
   text: string;
 }
 
-type Segment = InjectionSegment | TextSegment;
+interface TimestampSegment {
+  kind: "timestamp";
+  raw: string;
+}
+
+type Segment = InjectionSegment | TextSegment | TimestampSegment;
 
 const WRAPPER_RE = /<([\w-]+)>([\s\S]*?)<\/\1>/g;
 
@@ -155,7 +163,10 @@ export function parseUserMessage(text: string): Segment[] {
   }
 
   const interesting = matches.filter(
-    (x) => INJECTION_TAGS.has(x.tag) || STRIP_WRAPPERS.has(x.tag)
+    (x) =>
+      INJECTION_TAGS.has(x.tag) ||
+      STRIP_WRAPPERS.has(x.tag) ||
+      x.tag === TIMESTAMP_TAG
   );
   const outer: typeof interesting = [];
   for (const x of interesting) {
@@ -172,6 +183,8 @@ export function parseUserMessage(text: string): Segment[] {
     }
     if (STRIP_WRAPPERS.has(cut.tag)) {
       segments.push({ kind: "text", text: cut.content });
+    } else if (cut.tag === TIMESTAMP_TAG) {
+      segments.push({ kind: "timestamp", raw: cut.content });
     } else {
       segments.push({
         kind: "injection",
@@ -189,12 +202,12 @@ export function parseUserMessage(text: string): Segment[] {
   return segments;
 }
 
-interface InjectionChipProps {
+interface UserInjectionChipProps {
   segment: InjectionSegment;
   queryTokens: string[];
 }
 
-function InjectionChip({ segment, queryTokens }: InjectionChipProps) {
+function UserInjectionChip({ segment, queryTokens }: UserInjectionChipProps) {
   const matchesQuery =
     queryTokens.length > 0 &&
     queryTokens.some((t) =>
@@ -207,58 +220,15 @@ function InjectionChip({ segment, queryTokens }: InjectionChipProps) {
     return <ImageAttachmentCard raw={segment.raw} matchesQuery={matchesQuery} />;
   }
 
-  return <PlainInjectionChip segment={segment} matchesQuery={matchesQuery} />;
-}
-
-interface PlainChipProps {
-  segment: InjectionSegment;
-  matchesQuery: boolean;
-}
-
-function PlainInjectionChip({ segment, matchesQuery }: PlainChipProps) {
-  const [open, setOpen] = React.useState(false);
   const Icon = TAG_ICON[segment.tag] ?? Wrench;
-  const label = getTagLabel(segment.tag);
-
   return (
-    <div className="my-1.5 space-y-2">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] transition-colors",
-          "border-border bg-background-soft text-muted-foreground",
-          "hover:border-primary/50 hover:bg-primary-soft/40 hover:text-foreground",
-          open && "border-primary/40 bg-primary-soft/30 text-foreground",
-          matchesQuery && !open && "border-accent/60 ring-1 ring-accent/30"
-        )}
-        aria-expanded={open}
-      >
-        <Icon className="h-3 w-3 shrink-0" strokeWidth={2} />
-        <span className="font-sans font-medium tracking-tight whitespace-nowrap">
-          {label}
-        </span>
-        {segment.summary ? (
-          <>
-            <span className="opacity-40">·</span>
-            <span className="truncate">{segment.summary}</span>
-          </>
-        ) : null}
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 shrink-0 transition-transform duration-150",
-            open && "rotate-90"
-          )}
-          strokeWidth={2}
-        />
-      </button>
-
-      {open ? (
-        <pre className="max-h-[400px] overflow-auto rounded-md border border-border bg-background-soft px-3 py-2.5 font-mono text-[11px] leading-[1.6] text-foreground/80 whitespace-pre-wrap break-words">
-          {segment.raw.trim()}
-        </pre>
-      ) : null}
-    </div>
+    <InjectionChip
+      icon={Icon}
+      label={getTagLabel(segment.tag)}
+      summary={segment.summary || undefined}
+      raw={segment.raw}
+      matchesQuery={matchesQuery}
+    />
   );
 }
 
@@ -277,13 +247,11 @@ function ImageAttachmentCard({ raw, matchesQuery }: ImageAttachmentCardProps) {
   // the user still sees *something* and can expand to read the raw text.
   if (paths.length === 0) {
     return (
-      <PlainInjectionChip
-        segment={{
-          kind: "injection",
-          tag: "image_files",
-          raw,
-          summary: t("user.imageAttachment"),
-        }}
+      <InjectionChip
+        icon={ImageIcon}
+        label={t("user.imageFiles")}
+        summary={t("user.imageAttachment")}
+        raw={raw}
         matchesQuery={matchesQuery}
       />
     );
@@ -431,22 +399,37 @@ interface FallbackThumbProps extends ThumbProps {
 }
 
 function FallbackThumb({ path, onClick, large = false }: FallbackThumbProps) {
+  const { t } = useTranslation();
+  const name = basenameOf(path);
   return (
     <button
       type="button"
       onClick={onClick}
-      title={basenameOf(path)}
+      title={`${name}\n${path}`}
       className={cn(
-        "inline-flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border bg-background-soft/40 text-muted-foreground transition-colors",
-        "hover:border-primary/50 hover:text-foreground",
+        "group/fallback inline-flex items-center gap-2.5 rounded-md border border-dashed border-border/70 bg-background-soft/40 text-muted-foreground transition-colors",
+        "hover:border-primary/50 hover:bg-background-soft/70 hover:text-foreground",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-        large ? "h-28 w-full px-3 py-3" : "h-20 w-20"
+        large
+          ? "w-full px-3 py-2.5 text-left"
+          : "h-20 w-20 flex-col justify-center px-2 text-center"
       )}
     >
-      <ImageIcon className={large ? "h-5 w-5" : "h-4 w-4"} />
+      <ImageIcon
+        className={cn(
+          "shrink-0 opacity-70 transition-opacity group-hover/fallback:opacity-90",
+          large ? "h-4 w-4" : "h-4 w-4"
+        )}
+        strokeWidth={2}
+      />
       {large ? (
-        <span className="max-w-full truncate font-mono text-[10px]">
-          {basenameOf(path)}
+        <span className="flex min-w-0 flex-col gap-[1px]">
+          <span className="truncate font-mono text-[11px] text-foreground/80">
+            {name}
+          </span>
+          <span className="truncate text-[10px] text-muted-foreground/70 tracking-tight">
+            {t("image.unavailable")}
+          </span>
         </span>
       ) : null}
     </button>
@@ -522,9 +505,9 @@ function UserMessageBody({ text, queryTokens = [] }: UserMessageBodyProps) {
   const { i18n } = useTranslation();
   const segments = React.useMemo(() => parseUserMessage(text), [text, i18n.language]);
 
-  const hasInjection = segments.some((s) => s.kind === "injection");
+  const hasNonText = segments.some((s) => s.kind !== "text");
   if (
-    !hasInjection &&
+    !hasNonText &&
     segments.length === 1 &&
     segments[0].kind === "text" &&
     segments[0].text === text
@@ -553,8 +536,11 @@ function UserMessageBody({ text, queryTokens = [] }: UserMessageBodyProps) {
             />
           );
         }
+        if (seg.kind === "timestamp") {
+          return <TimestampBadge key={`ts-${i}`} raw={seg.raw} />;
+        }
         return (
-          <InjectionChip
+          <UserInjectionChip
             key={`i-${i}`}
             segment={seg}
             queryTokens={queryTokens}

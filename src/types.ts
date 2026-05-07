@@ -10,6 +10,16 @@ export type ParsedSegment = {
   ts: number;
 };
 
+/**
+ * Provenance of the session record. `local` sessions come from the on-disk
+ * adapters (Cursor / Claude Code / Codex JSONL) and have a real `filePath`
+ * pointing at the transcript inside one of `SourceRoots`. `remote` sessions
+ * come from the team-mode `ingest` HTTP API and intentionally have NO local
+ * file (`filePath` is `undefined`); any code path that wants to read the
+ * underlying transcript on disk must check `provider === "local"` first.
+ */
+export type SessionProvider = "local" | "remote";
+
 export type Session = {
   source: SourceId;
   sessionKey: string;
@@ -17,7 +27,18 @@ export type Session = {
   repo: string;
   repoPath?: string;
   title: string;
-  filePath: string;
+  /**
+   * Absolute path of the underlying transcript on local disk. `undefined`
+   * when `provider === "remote"` — the session lives in the ingest DB and
+   * has no per-machine file. Callers that need to delete / download / open
+   * the file must guard on `provider` first.
+   */
+  filePath?: string;
+  /**
+   * Defaults to `"local"` for legacy callers/tests that don't set it. Set to
+   * `"remote"` when a session is materialised from the ingest API.
+   */
+  provider: SessionProvider;
   startedAt: number;
   updatedAt: number;
   sizeBytes: number;
@@ -131,6 +152,39 @@ export type SubagentSessionDetail = {
 export type ExportKind = "rules" | "skill";
 export type ExportMode = "smart" | "basic";
 export type OpenFileAction = "opened" | "revealed";
+
+/**
+ * Top-level data-source mode. `personal` reads from the on-machine adapters,
+ * `team` proxies an `ingest` HTTP API. The two modes are mutually exclusive
+ * — switching wipes the in-memory provider and rebuilds from configuration.
+ */
+export type AppMode = "personal" | "team";
+
+/**
+ * Capability bits surfaced to the frontend so destructive / file-system
+ * actions can hide themselves when they would not work on the current data
+ * source. These mirror the boolean methods the active provider implements.
+ */
+export type ProviderCapabilities = {
+  /** star / tags / notes editing on session metadata */
+  annotations: boolean;
+  /** AI auto-tagging (LLM call out) */
+  aiTagging: boolean;
+  /** Smart Export (rules / skill markdown generation) */
+  smartExport: boolean;
+  /** delete a session's underlying transcript files */
+  deleteSession: boolean;
+  /** download the raw JSONL file */
+  downloadJsonl: boolean;
+  /** "Reveal in Finder" / open in default app */
+  openLocalFile: boolean;
+  /** show subagent timeline (Cursor / Claude sidechain) */
+  subagents: boolean;
+  /** detail page returns the full original transcript text */
+  fullTranscript: boolean;
+  /** search has full-text content matching (vs project/repo LIKE only) */
+  fullTextSearch: boolean;
+};
 
 export type ComposerMeta = {
   title: string;

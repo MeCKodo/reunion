@@ -26,6 +26,35 @@ process.env.REUNION_DATA_DIR = DATA_DIR;
 process.env.REUNION_FRONTEND_DIST_DIR = FRONTEND_DIST;
 process.env.REUNION_LEGACY_STATIC_DIR = LEGACY_STATIC;
 
+// Team-mode wiring is compile-time in production but env-overridable in dev /
+// tests. We point at a deliberately-unbound port so any test that calls
+// `applyMode({mode:"team"})` triggers RemoteUnreachableError (502) instead of
+// either hanging or — worse — talking to whatever real ingest the developer
+// might have running on :8080 from the smoke-test stack.
+if (!process.env.REUNION_TEAM_INGEST_URL) {
+  process.env.REUNION_TEAM_INGEST_URL = "http://127.0.0.1:1";
+}
+if (!process.env.REUNION_TEAM_INGEST_TOKEN) {
+  process.env.REUNION_TEAM_INGEST_TOKEN = "test-secret";
+}
+
+// Edition default for tests: `team`, because the bulk of the suite assumes
+// the team-mode code path is reachable. The dedicated
+// `mode-store.personal-edition.test.ts` file overrides this BEFORE this
+// module is imported to exercise the personal-edition gate.
+if (!process.env.REUNION_EDITION) {
+  process.env.REUNION_EDITION = "team";
+}
+
+// Disable the team-mode repo host allowlist by default in tests. Existing
+// suites use placeholder remotes (example.com, github.com, "git@a") that
+// would otherwise be filtered out by the production default. Tests that
+// specifically exercise the allowlist set this env var explicitly via
+// `before` hooks.
+if (!process.env.REUNION_TEAM_REPO_HOST_ALLOWLIST) {
+  process.env.REUNION_TEAM_REPO_HOST_ALLOWLIST = "";
+}
+
 export const TEST_DIRS = {
   root: TEST_ROOT,
   data: DATA_DIR,

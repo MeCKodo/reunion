@@ -71,13 +71,21 @@ export type SubagentDetail = {
   events: TimelineEvent[];
 };
 
+/** Where the row originated. `local` = on-disk transcript; `remote` = team
+ * mode aggregate from the ingest backend. The frontend uses this to gate
+ * file-system actions (open, delete, download). */
+export type SessionProvider = "local" | "remote";
+
 export type SearchResult = {
   session_key: string;
   session_id: string;
   source: SourceId;
+  /** Optional in team mode where rows come from the ingest aggregate. */
+  provider?: SessionProvider;
   repo: string;
   repo_path?: string;
   title: string;
+  /** Empty string for remote sessions — there is no on-disk transcript. */
   file_path: string;
   started_at: number;
   updated_at: number;
@@ -105,12 +113,39 @@ export type ClockAlignment = {
   total: number;
 };
 
+/** Aggregate metrics surfaced by the team-mode backend. Personal mode leaves
+ * this undefined; the UI shows them only when present. */
+export type SessionMetrics = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  prompt_count: number;
+  assistant_turns: number;
+  tool_calls_total: number;
+  cache_hit_rate?: number;
+  version_count?: number;
+};
+
+/** Backend-provided rendering hint for the detail view (banner copy etc.).
+ * Mainly used in team mode to flag sampled / truncated transcripts. */
+export type SessionHint = {
+  sampled?: boolean;
+  truncated?: boolean;
+  missing_tool_results?: boolean;
+  message?: string;
+};
+
 export type SessionDetail = SearchResult & {
   content: string;
   raw_content: string;
   events: TimelineEvent[];
   subagents: SubagentDetail[];
   clock_alignment?: ClockAlignment;
+  metrics?: SessionMetrics;
+  /** Unix seconds — only set in team mode (max created_at across versions). */
+  last_upload_time?: number;
+  hint?: SessionHint;
 };
 
 export type Segment = { index: number; role: Role; text: string; ts: number };

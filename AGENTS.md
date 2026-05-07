@@ -18,7 +18,26 @@ pnpm run serve   # http://127.0.0.1:9765
 - `pnpm run build:backend` — 仅打包后端 + Electron 主进程 (esbuild)
 - `pnpm start` — 用编译后的 JS 启动服务
 - `pnpm run electron` — 本地启动 Electron App
-- `pnpm run dist:mac` — 出 macOS DMG（详见 `README.md`）
+- `pnpm run electron` / `electron:team` — 本地启动 Electron App（团队版 UI）
+- `pnpm run electron:personal` — 本地启动 Electron App（个人版 UI，验证 ModeSwitcher 不显示）
+- `pnpm run dist:mac` — 出 macOS DMG（团队版，等价于 `dist:mac:team`）
+- `pnpm run dist:mac:personal` — 出个人版 DMG（无团队功能、bundle 不含 ingest token）
+
+### Editions
+
+`REUNION_EDITION` 在构建期决定一份 bundle 是「团队版」(`team`) 还是「个人版」(`personal`)：
+
+- 团队版：`ModeSwitcher` 可见，可在 personal/team 模式间切换；构建时通过 `REUNION_BUILD_INGEST_URL` / `REUNION_BUILD_INGEST_TOKEN` env 把团队 ingest 的 baseUrl + token 经 esbuild `define` 注入到 bundle。
+- 个人版：`ModeSwitcher` 始终隐藏；后端 `/api/mode` 拒绝切换到 team（HTTP 403），且 bundle 内 token 字段为空字符串（`build-electron.mjs` 强制清空，杜绝把真 secret 打进个人版的可能）。
+
+发版机：把 secret 放到 `~/.reunion/release.env`（chmod 600），格式：
+
+```bash
+export REUNION_BUILD_INGEST_URL="https://ingest.your-team.example"
+export REUNION_BUILD_INGEST_TOKEN="..."
+```
+
+`scripts/release.sh` 启动时会 source 这个文件，自动构建两个 edition × 两个 arch 共 4 份 DMG 并上传到 GitLab Release。仅需个人版时加 `--personal-only`。
 
 ## 项目结构
 

@@ -1,0 +1,81 @@
+# Personal-edition variant of electron-builder.yml.
+#
+# Distributed externally — its bundle ships with REUNION_EDITION=personal,
+# the team-mode UI is hidden, and the backend refuses POST /api/mode
+# {mode:"team"}. The values bundled into `src/config.ts` for
+# TEAM_INGEST_URL/TOKEN are forced to empty strings by build-electron.mjs.
+#
+# Keep this file in sync with electron-builder.yml. Only the three fields
+# at the top (productName / appId / artifactName) and the mac.icon path
+# differ. electron-builder doesn't support YAML extends; copy/paste is
+# unavoidable.
+
+appId: com.meckodo.reunion.personal
+productName: Reunion Personal
+copyright: Copyright (c) 2026 MeCKodo
+asar: true
+
+# Custom artifact filename so personal + team builds don't collide in the
+# release/ directory and so users can tell them apart in their Downloads.
+artifactName: ${productName}-${version}-${arch}.${ext}
+
+directories:
+  output: release
+  buildResources: build
+
+afterPack: scripts/after-pack.cjs
+
+files:
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/{.DS_Store,Thumbs.db}"
+  - "!frontend/**/*"
+  - "!data/**/*"
+  - "!static/**/*"
+  - "!release/**/*"
+  - "!**/*.tsbuildinfo"
+  - "!{tsconfig*.json,electron-builder.yml,electron-builder.personal.yml,*.html,*.py}"
+  - "!{AGENTS.md,README.md,QUICK_START_DMG.md,FIRST_OPEN.md}"
+  - "!.cursor/**/*"
+  - "!.git/**/*"
+
+extraResources:
+  - from: frontend/dist
+    to: frontend/dist
+    filter:
+      - "**/*"
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  notarize: false
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+
+dmg:
+  title: ${productName} ${version}
+  icon: build/icon.icns
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 140
+      y: 200
+      type: file
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications
+
+publish: null

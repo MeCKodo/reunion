@@ -20,6 +20,12 @@ interface MoreActionsMenuProps {
    *  backend round-trip + state cleanup finishes so the spinner stays in
    *  sync. */
   onDeleteSession: () => Promise<void>;
+  /** When false (team mode), the JSONL download row is hidden — the backend
+   *  doesn't have an on-disk transcript to serve. */
+  canDownloadJsonl?: boolean;
+  /** When false (team mode), the destructive delete row is hidden — sessions
+   *  live in the shared backend and aren't owned by the local app. */
+  canDeleteSession?: boolean;
 }
 
 type View = "menu" | "confirm-delete";
@@ -93,6 +99,8 @@ function MoreActionsMenu({
   onCopySessionId,
   onDownloadJsonl,
   onDeleteSession,
+  canDownloadJsonl = true,
+  canDeleteSession = true,
 }: MoreActionsMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
@@ -171,24 +179,30 @@ function MoreActionsMenu({
               hint={t("more.copySessionIdHint")}
               onClick={handleCopy}
             />
-            <MenuItem
-              icon={<Download className="h-3.5 w-3.5" />}
-              label={t("more.downloadJsonl")}
-              hint={t("more.downloadJsonlHint")}
-              busy={busyKey === "jsonl"}
-              disabled={busyKey === "jsonl"}
-              onClick={handleDownloadJsonl}
-            />
-            {/* Visual divider separates safe from destructive actions. */}
-            <div className="my-1 border-t border-border" />
-            <MenuItem
-              icon={<Trash2 className="h-3.5 w-3.5" />}
-              label={t("more.deleteSession")}
-              hint={t("more.deleteSessionHint")}
-              destructive
-              disabled={Boolean(busyKey)}
-              onClick={() => setView("confirm-delete")}
-            />
+            {canDownloadJsonl ? (
+              <MenuItem
+                icon={<Download className="h-3.5 w-3.5" />}
+                label={t("more.downloadJsonl")}
+                hint={t("more.downloadJsonlHint")}
+                busy={busyKey === "jsonl"}
+                disabled={busyKey === "jsonl"}
+                onClick={handleDownloadJsonl}
+              />
+            ) : null}
+            {canDeleteSession ? (
+              <>
+                {/* Visual divider separates safe from destructive actions. */}
+                <div className="my-1 border-t border-border" />
+                <MenuItem
+                  icon={<Trash2 className="h-3.5 w-3.5" />}
+                  label={t("more.deleteSession")}
+                  hint={t("more.deleteSessionHint")}
+                  destructive
+                  disabled={Boolean(busyKey)}
+                  onClick={() => setView("confirm-delete")}
+                />
+              </>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-3 p-2 text-[13px]">

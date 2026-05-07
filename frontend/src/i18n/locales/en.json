@@ -431,5 +431,41 @@
     "label": "Lang",
     "en": "EN",
     "zh": "中文"
+  },
+
+  "mode": {
+    "label": "Mode",
+    "personal": "Personal",
+    "team": "Team",
+    "personalDesc": "Read conversations from local workspaces",
+    "teamDesc": "Connect to the team backend and browse everyone's sessions",
+    "switcherTooltip": "Switch data source",
+    "configureTeam": "Configure team mode",
+    "teamModeBadge": "Team",
+    "personalModeBadge": "Personal",
+    "switching": "Switching…",
+    "switched": "Switched to {{mode}}",
+    "switchFailed": "Switch failed: {{error}}",
+    "lastError": "Last connection failed: {{error}}",
+    "dialog": {
+      "title": "Team mode configuration",
+      "subtitle": "Connect to the ingest backend to browse the team's sessions",
+      "baseUrlLabel": "Service URL",
+      "baseUrlPlaceholder": "https://ingest.example.com",
+      "tokenLabel": "Bearer token",
+      "tokenPlaceholder": "Team-issued access token",
+      "tokenHint": "The token is stored locally (mode 0600); it is never uploaded or shown back.",
+      "save": "Switch to team mode",
+      "switchToPersonal": "Switch to personal mode",
+      "back": "Cancel",
+      "missingFields": "Service URL and token are required",
+      "currentMode": "Current mode: {{mode}}"
+    },
+    "banner": {
+      "team": "Team mode: data comes from the backend aggregate; local actions (delete, download, open file) are disabled",
+      "sampled": "This session was sampled — some conversation events may be missing",
+      "truncated": "Some long text / tool input / output was truncated",
+      "missingToolResults": "Cursor sources don't upload tool results; tool calls show inputs only"
+    }
   }
 }

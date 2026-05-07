@@ -15,12 +15,20 @@ yarn-error.log*
 .env.*
 .vscode/
 .idea/
-.cursor/
+# Cursor: track shared skills/rules with the repo, but keep personal plans
+# (per-developer scratchpad) and any other future per-user state local.
+.cursor/*
+!.cursor/skills/
+!.cursor/rules/
 .claude/
 coverage/
 *.tsbuildinfo
 .DS_Store
 .omx
+
+# Playwright artifacts (e2e/run.sh)
+playwright-report/
+test-results/
 
 # local design previews
 *-demo.html

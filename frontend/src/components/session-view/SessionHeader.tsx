@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { decodeEntities, formatDuration, formatTs, prettifyRepoName } from "@/lib/format";
 import type { ExportKind } from "@/lib/api";
 import type { SessionDetail, SourceId } from "@/lib/types";
+import type { ProviderCapabilities } from "@/lib/mode";
 import { SOURCE_LABEL } from "@/lib/types";
 import { ExportActions } from "./ExportActions";
 import { MoreActionsMenu } from "./MoreActionsMenu";
@@ -31,6 +32,12 @@ interface SessionHeaderProps {
   setTagInput: (value: string) => void;
   onAddTag: (value: string) => boolean;
   onRemoveTag: (tag: string) => void;
+
+  /** Capability flags from the active provider; used to hide local-only
+   *  controls (export, delete, download, tag editor, star button) in team
+   *  mode. Defaults to a fully-enabled object so existing tests don't have to
+   *  thread it through. */
+  capabilities?: ProviderCapabilities;
 }
 
 function SessionHeader({
@@ -45,10 +52,17 @@ function SessionHeader({
   setTagInput,
   onAddTag,
   onRemoveTag,
+  capabilities,
 }: SessionHeaderProps) {
   const { t } = useTranslation();
   const repoLabel = prettifyRepoName(detail.repo);
   const fullTitle = decodeEntities(detail.title || detail.session_id);
+  // Default to a fully-enabled capability set so unmounted-from-tests paths
+  // still show the local-mode UI. The `?? true` fallbacks below cover that.
+  const canSmartExport = capabilities?.smartExport ?? true;
+  const canDownloadJsonl = capabilities?.downloadJsonl ?? true;
+  const canDelete = capabilities?.deleteSession ?? true;
+  const canAnnotate = capabilities?.annotations ?? true;
 
   // Detect actual visual truncation so the tooltip only fires when there is
   // genuinely hidden content. Re-runs when the title or container size
@@ -78,20 +92,26 @@ function SessionHeader({
           Title is hard-truncated to one line; the full string is exposed via
           a native tooltip so power users can hover to read the rest. */}
       <div className="flex items-center gap-2 min-w-0">
-        <button
-          type="button"
-          onClick={onToggleStar}
-          title={detail.starred ? t("session.unstar") : t("session.star")}
-          style={noDragStyle}
-          className={cn(
-            "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors shrink-0",
-            detail.starred
-              ? "text-primary hover:bg-primary-soft/60"
-              : "text-muted-foreground hover:text-foreground hover:bg-background-soft"
-          )}
-        >
-          <Star className={cn("h-4 w-4", detail.starred && "fill-primary")} />
-        </button>
+        {canAnnotate ? (
+          <button
+            type="button"
+            onClick={onToggleStar}
+            title={detail.starred ? t("session.unstar") : t("session.star")}
+            style={noDragStyle}
+            className={cn(
+              "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors shrink-0",
+              detail.starred
+                ? "text-primary hover:bg-primary-soft/60"
+                : "text-muted-foreground hover:text-foreground hover:bg-background-soft"
+            )}
+          >
+            <Star className={cn("h-4 w-4", detail.starred && "fill-primary")} />
+          </button>
+        ) : (
+          /* Team mode: keep the title aligned by reserving the same width as
+             the star button instead of letting the layout shift. */
+          <span className="h-7 w-7 shrink-0" aria-hidden />
+        )}
 
         {/* The wrapper is the truncate container *and* the hover anchor for
             the custom tooltip. We deliberately omit the native `title`
@@ -117,13 +137,17 @@ function SessionHeader({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0" style={noDragStyle}>
-          <ExportActions onExport={onExport} loadingKind={exportLoading} />
+          {canSmartExport ? (
+            <ExportActions onExport={onExport} loadingKind={exportLoading} />
+          ) : null}
 
           <MoreActionsMenu
             sessionTitle={fullTitle}
             onCopySessionId={onCopySessionId}
             onDownloadJsonl={onDownloadJsonl}
             onDeleteSession={onDeleteSession}
+            canDownloadJsonl={canDownloadJsonl}
+            canDeleteSession={canDelete}
           />
         </div>
       </div>
@@ -163,19 +187,23 @@ function SessionHeader({
           {formatDuration(detail.duration_sec)}
         </span>
 
-        {/* Subtle vertical separator so the tag editor reads as its own zone
-            without breaking onto another line. */}
-        <span aria-hidden className="hidden sm:inline-block h-3 w-px bg-border" />
+        {canAnnotate ? (
+          <>
+            {/* Subtle vertical separator so the tag editor reads as its own zone
+                without breaking onto another line. */}
+            <span aria-hidden className="hidden sm:inline-block h-3 w-px bg-border" />
 
-        <SessionTagEditor
-          tags={detail.tags ?? []}
-          tagInput={tagInput}
-          setTagInput={setTagInput}
-          onAddTag={onAddTag}
-          onRemoveTag={onRemoveTag}
-          aiTags={detail.ai_tag_set}
-          aiTaggedAt={detail.ai_tagged_at}
-        />
+            <SessionTagEditor
+              tags={detail.tags ?? []}
+              tagInput={tagInput}
+              setTagInput={setTagInput}
+              onAddTag={onAddTag}
+              onRemoveTag={onRemoveTag}
+              aiTags={detail.ai_tag_set}
+              aiTaggedAt={detail.ai_tagged_at}
+            />
+          </>
+        ) : null}
       </div>
     </div>
   );

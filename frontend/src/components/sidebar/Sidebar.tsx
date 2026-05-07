@@ -15,6 +15,7 @@ import type {
   SourceSummary,
   TagSummary,
 } from "@/lib/types";
+import type { AppEdition, ProviderCapabilities } from "@/lib/mode";
 import { SessionGroup } from "./SessionGroup";
 import { SidebarSearch } from "./SidebarSearch";
 import { SourceTabs } from "./SourceTabs";
@@ -59,6 +60,21 @@ interface SidebarProps {
 
   firstLoad: boolean;
   className?: string;
+
+  /** Optional element rendered at the bottom of the sidebar, below the
+   *  scrollable session list. Used to host the mode switcher (Linear-style
+   *  account-area pattern) without hard-wiring the Sidebar to the app-mode
+   *  hook. */
+  footerSlot?: React.ReactNode;
+
+  /** Capability flags from the active provider; used to hide local-only
+   *  controls (reindex, AI tagger, star/tag chips) when running in team
+   *  mode. Optional — defaults preserve the existing personal-mode UI. */
+  capabilities?: ProviderCapabilities;
+
+  /** Build-time edition. When `team`, a small chip is shown next to the
+   *  brand so the user is never in doubt which build they launched. */
+  edition?: AppEdition;
 }
 
 function Sidebar(props: SidebarProps) {
@@ -83,8 +99,21 @@ function Sidebar(props: SidebarProps) {
     selectedSource,
     setSelectedSource,
     sourceSummaries,
+    footerSlot,
+    capabilities,
+    edition,
     ...searchProps
   } = props;
+  const canAnnotate = capabilities?.annotations ?? true;
+  const canAiTag = capabilities?.aiTagging ?? true;
+  // Source tabs split sessions by Cursor / Claude / Codex on disk. In team
+  // mode the backend returns a unified list and `sourceSummaries` is empty,
+  // so the tabs would render with zero counts; hide them entirely instead.
+  const showSourceTabs = sourceSummaries.length > 0;
+  // Reindex is purely a local-disk concept — we keep it visible only when
+  // the provider exposes some kind of mutating capability. `deleteSession`
+  // is a good proxy for "this is a local data source".
+  const showReindex = capabilities?.deleteSession ?? true;
 
   const { t } = useTranslation();
   const hasFilters = onlyStarred || selectedTags.length > 0;
@@ -119,8 +148,16 @@ function Sidebar(props: SidebarProps) {
           <div className="flex items-center gap-2 font-serif text-[17px] font-semibold tracking-tight">
             <ReunionMark className="h-[18px] w-[18px]" />
             Reunion
+            {edition === "team" ? (
+              <span
+                className="inline-flex items-center rounded-md bg-primary-soft px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-overline text-primary leading-none"
+                title={t("mode.teamModeBadge")}
+              >
+                {t("mode.teamModeBadge")}
+              </span>
+            ) : null}
           </div>
-          <div className="flex items-center gap-0.5" style={headerNoDragStyle}>
+          <div className="flex items-center gap-1" style={headerNoDragStyle}>
             <Tooltip text={t("language.label")}>
               <button
                 type="button"
@@ -161,16 +198,18 @@ function Sidebar(props: SidebarProps) {
                 ) : null}
               </button>
             </Tooltip>
-            <Tooltip text={t("sidebar.reindexTooltip")}>
-              <button
-                type="button"
-                onClick={onReindex}
-                aria-label={t("sidebar.reindex")}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-            </Tooltip>
+            {showReindex ? (
+              <Tooltip text={t("sidebar.reindexTooltip")}>
+                <button
+                  type="button"
+                  onClick={onReindex}
+                  aria-label={t("sidebar.reindex")}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
+            ) : null}
           </div>
         </div>
         <div className="mt-3" style={headerNoDragStyle}>
@@ -179,18 +218,22 @@ function Sidebar(props: SidebarProps) {
             onlyStarred={onlyStarred}
             selectedTags={selectedTags}
             loading={loading}
+            canAnnotate={canAnnotate}
+            canAiTag={canAiTag}
             {...searchProps}
           />
         </div>
       </div>
 
       <div className="px-4 py-2 border-b border-border space-y-2">
-        <SourceTabs
-          value={selectedSource}
-          onChange={setSelectedSource}
-          sources={sourceSummaries}
-          totalCount={sourceSummaries.reduce((sum, item) => sum + item.session_count, 0)}
-        />
+        {showSourceTabs ? (
+          <SourceTabs
+            value={selectedSource}
+            onChange={setSelectedSource}
+            sources={sourceSummaries}
+            totalCount={sourceSummaries.reduce((sum, item) => sum + item.session_count, 0)}
+          />
+        ) : null}
         <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-overline text-muted-foreground">
           <span>
             {t("sidebar.threads")} ·{" "}
@@ -240,6 +283,11 @@ function Sidebar(props: SidebarProps) {
           </div>
         )}
       </div>
+      {footerSlot ? (
+        <div className="shrink-0 border-t border-border bg-background-soft px-2 py-2">
+          {footerSlot}
+        </div>
+      ) : null}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );

@@ -431,5 +431,41 @@
     "label": "语言",
     "en": "EN",
     "zh": "中文"
+  },
+
+  "mode": {
+    "label": "模式",
+    "personal": "个人版",
+    "team": "团队版",
+    "personalDesc": "读取本地工作区的对话",
+    "teamDesc": "对接团队后端，可查看全员的会话",
+    "switcherTooltip": "切换数据源",
+    "configureTeam": "配置团队版",
+    "teamModeBadge": "团队版",
+    "personalModeBadge": "个人版",
+    "switching": "正在切换…",
+    "switched": "已切换到{{mode}}",
+    "switchFailed": "切换失败：{{error}}",
+    "lastError": "上次连接失败：{{error}}",
+    "dialog": {
+      "title": "团队版配置",
+      "subtitle": "对接 ingest 服务以查看团队全员的会话",
+      "baseUrlLabel": "服务地址",
+      "baseUrlPlaceholder": "https://ingest.example.com",
+      "tokenLabel": "Bearer Token",
+      "tokenPlaceholder": "团队下发的访问令牌",
+      "tokenHint": "Token 仅本地保存（权限 0600），不会上传或显示。",
+      "save": "切换到团队版",
+      "switchToPersonal": "切换回个人版",
+      "back": "取消",
+      "missingFields": "请填写服务地址和 Token",
+      "currentMode": "当前模式：{{mode}}"
+    },
+    "banner": {
+      "team": "团队版：数据来自后端聚合，本地操作（删除、下载、打开文件）不可用",
+      "sampled": "本会话为采样上传，可能未包含全部对话",
+      "truncated": "部分长文本/工具输入输出已截断",
+      "missingToolResults": "Cursor 来源不上报工具结果，工具调用仅显示输入"
+    }
   }
 }

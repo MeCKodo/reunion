@@ -17,6 +17,37 @@ const pkg = JSON.parse(
   await readFile(path.join(projectRoot, "package.json"), "utf-8")
 );
 
+// Edition + team-mode secret injection. See `src/config.ts` for the
+// declared constants these values replace. We default edition to "personal"
+// and the secrets to "" so accidentally running `pnpm run build` without
+// any env still produces a valid (personal-only) bundle.
+const EDITION = (process.env.REUNION_EDITION || "personal").trim();
+if (EDITION !== "personal" && EDITION !== "team") {
+  console.error(
+    `REUNION_EDITION must be "personal" or "team" (got "${EDITION}")`
+  );
+  process.exit(1);
+}
+const RAW_PROD_URL = (process.env.REUNION_BUILD_INGEST_URL || "").trim();
+const RAW_PROD_TOKEN = (process.env.REUNION_BUILD_INGEST_TOKEN || "").trim();
+// For personal edition we deliberately wipe the secrets even if the env
+// happened to be set, so leaked dev shells can't accidentally bake a real
+// token into a personal-edition .dmg.
+const PROD_URL = EDITION === "team" ? RAW_PROD_URL : "";
+const PROD_TOKEN = EDITION === "team" ? RAW_PROD_TOKEN : "";
+
+if (EDITION === "team" && (!PROD_URL || !PROD_TOKEN)) {
+  console.warn(
+    "[build] REUNION_EDITION=team but REUNION_BUILD_INGEST_URL/TOKEN is empty; team mode in this bundle will fail to connect."
+  );
+}
+
+const sharedDefines = {
+  __REUNION_EDITION__: JSON.stringify(EDITION),
+  __REUNION_PROD_INGEST_URL__: JSON.stringify(PROD_URL),
+  __REUNION_PROD_INGEST_TOKEN__: JSON.stringify(PROD_TOKEN),
+};
+
 // External packages stay outside the bundle and are resolved at runtime via
 // node_modules. Electron and the ESM-only sindre packages MUST be external,
 // the rest is for safety.
@@ -57,6 +88,7 @@ async function bundleElectronMain() {
     external: uniqueExternals,
     logLevel: "info",
     banner: { js: esmBanner },
+    define: sharedDefines,
   });
 }
 
@@ -82,6 +114,7 @@ async function bundleBackendStandalone() {
     minify: false,
     external: uniqueExternals,
     logLevel: "warning",
+    define: sharedDefines,
   });
 }
 
@@ -95,12 +128,19 @@ async function main() {
   await writeFile(
     path.join(distDir, "BUILD_INFO.json"),
     JSON.stringify(
-      { builtAt: new Date().toISOString(), version: pkg.version },
+      {
+        builtAt: new Date().toISOString(),
+        version: pkg.version,
+        edition: EDITION,
+        // Only echo the URL (which is not a secret on its own) to make
+        // post-mortem easier; never echo the token.
+        teamIngestUrl: PROD_URL || null,
+      },
       null,
       2
     )
   );
-  console.log("✓ electron + backend bundles ready in dist/");
+  console.log(`✓ electron + backend bundles ready in dist/ (edition=${EDITION})`);
 }
 
 main().catch((error) => {

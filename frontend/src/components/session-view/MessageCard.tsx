@@ -17,6 +17,7 @@ import {
 import { StructuredToolInput } from "./StructuredToolInput";
 import { Markdown } from "@/components/shared/Markdown";
 import { UserMessageBody } from "./UserMessageBody";
+import { AssistantMessageBody } from "./AssistantMessageBody";
 import { ToolResultBlock } from "./ToolResultBlock";
 import { ImageThumb } from "@/components/shared/ImageThumb";
 import { isClaudeImagePayload } from "@/lib/asset";
@@ -171,6 +172,8 @@ function MessageCardImpl({
           ) : meta.prose ? (
             event.category === "user" ? (
               <UserMessageBody text={event.text} queryTokens={queryTokens} />
+            ) : event.category === "assistant" ? (
+              <AssistantMessageBody text={event.text} queryTokens={queryTokens} />
             ) : (
               <Markdown source={event.text} queryTokens={queryTokens} />
             )

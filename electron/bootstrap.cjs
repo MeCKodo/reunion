@@ -22,9 +22,34 @@ const frontendDistDir = isPackaged
   ? path.join(process.resourcesPath, "frontend", "dist")
   : path.join(devProjectRoot, "frontend", "dist");
 
-process.env.REUNION_DATA_DIR = dataDir;
-process.env.REUNION_FRONTEND_DIST_DIR = frontendDistDir;
+// Honor any pre-set value (e.g. from an E2E harness or a power-user shell
+// override) before falling back to the path we computed above.
+process.env.REUNION_DATA_DIR = process.env.REUNION_DATA_DIR || dataDir;
+process.env.REUNION_FRONTEND_DIST_DIR =
+  process.env.REUNION_FRONTEND_DIST_DIR || frontendDistDir;
 process.env.REUNION_BOOTSTRAPPED = "1";
+
+// Team-mode wiring auto-selection.
+//
+// Production .dmg: isPackaged=true. We do nothing here and let
+// `src/config.ts` resolve `TEAM_INGEST_URL`/`TEAM_INGEST_TOKEN` from its
+// compile-time defaults (PROD_INGEST_URL / PROD_INGEST_TOKEN).
+//
+// Dev (`pnpm run electron`, double-click .app from a local build, or
+// Spotlight from a dev workspace): isPackaged=false. The shell env is NOT
+// inherited when launched from Finder, so we have to default sensibly here.
+// We point at the local ingest dev server (`docker-compose.dev.yml` +
+// `cmd/server-dev`) which is what every Reunion engineer runs anyway. A
+// developer that has already exported these env vars in their shell wins
+// (e.g. CI, or pointing at a staging cluster).
+if (!isPackaged) {
+  if (!process.env.REUNION_TEAM_INGEST_URL) {
+    process.env.REUNION_TEAM_INGEST_URL = "http://127.0.0.1:8080";
+  }
+  if (!process.env.REUNION_TEAM_INGEST_TOKEN) {
+    process.env.REUNION_TEAM_INGEST_TOKEN = "local-test-token";
+  }
+}
 
 const mainUrl = require("node:url").pathToFileURL(
   path.join(__dirname, "main.js")
