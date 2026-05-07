@@ -27,6 +27,10 @@ import {
   type ExportKind,
 } from "@/lib/api";
 import { decodeEntities } from "@/lib/format";
+import {
+  normalizeClientTagFilter,
+  type ClientTagFilter,
+} from "@/lib/clientTag";
 import { eventSearchText, tokenizeQuery } from "@/lib/text";
 import {
   isSubagentToolEvent,
@@ -68,6 +72,22 @@ export default function App() {
   const [selectedRepo, setSelectedRepo] = usePersistentState<string>(
     "filter:repo",
     "all"
+  );
+  // Client-tag filter for team mode (server / frontend / client / __none__).
+  // Persisted as a string (with `""` standing in for "all roles") because
+  // `usePersistentState` round-trips through localStorage as JSON and we want
+  // a stable on-disk shape; the typed union is exposed via the helper below.
+  const [selectedClientTagRaw, setSelectedClientTagRaw] = usePersistentState<string>(
+    "filter:clientTag",
+    ""
+  );
+  const selectedClientTag = useMemo<ClientTagFilter>(
+    () => normalizeClientTagFilter(selectedClientTagRaw),
+    [selectedClientTagRaw]
+  );
+  const setSelectedClientTag = useCallback(
+    (next: ClientTagFilter) => setSelectedClientTagRaw(next ?? ""),
+    [setSelectedClientTagRaw]
   );
   const [activeSessionKey, setActiveSessionKey] = useState("");
   const [detail, setDetail] = useState<SessionDetail | null>(null);
@@ -420,6 +440,7 @@ export default function App() {
           days,
           repo: selectedRepo,
           source: selectedSource,
+          clientTag: selectedClientTag,
           limit: 300,
           signal: controller.signal,
         });
@@ -466,7 +487,18 @@ export default function App() {
         }
       }
     },
-    [activeSessionKey, days, detail, notify, openSession, query, selectedRepo, selectedSource, t]
+    [
+      activeSessionKey,
+      days,
+      detail,
+      notify,
+      openSession,
+      query,
+      selectedRepo,
+      selectedSource,
+      selectedClientTag,
+      t,
+    ]
   );
 
   const reindex = useCallback(async () => {
@@ -492,11 +524,15 @@ export default function App() {
 
   const loadRepoOptions = useCallback(async () => {
     try {
-      setRepoCatalog(await fetchRepos());
+      // Mirror the active client-tag filter: in team mode, narrowing to
+      // `?tag=server` should also collapse the project list to repos that
+      // actually have server-tagged sessions, otherwise the picker shows
+      // ghost projects with zero results.
+      setRepoCatalog(await fetchRepos({ clientTag: selectedClientTag }));
     } catch {
       // non-fatal
     }
-  }, []);
+  }, [selectedClientTag]);
 
   const loadSourceSummaries = useCallback(async () => {
     try {
@@ -823,7 +859,16 @@ export default function App() {
   useEffect(() => {
     if (!didInitRef.current) return;
     runSearch().catch((error) => notify(String(error), "error"));
-  }, [days, selectedRepo, selectedSource]);
+  }, [days, selectedRepo, selectedSource, selectedClientTag]);
+
+  // Reload the project picker when the role filter changes so it only
+  // surfaces repos that have rows under the selected role. The repo
+  // reconciliation effect below then resets the active repo if it dropped
+  // out of the new list.
+  useEffect(() => {
+    if (!didInitRef.current) return;
+    loadRepoOptions().catch(() => undefined);
+  }, [selectedClientTag, loadRepoOptions]);
 
   // Picked source removed from available repos; reset to "all".
   useEffect(() => {
@@ -909,6 +954,7 @@ export default function App() {
             className="h-full w-full"
             capabilities={capabilities}
             edition={appModeLoaded ? appModeState.edition : undefined}
+            mode={appModeLoaded ? appModeState.mode : undefined}
             footerSlot={
               showModeSwitcher ? (
               <ModeSwitcher
@@ -950,6 +996,16 @@ export default function App() {
             selectedSource={selectedSource}
             setSelectedSource={handleSelectSource}
             sourceSummaries={sourceSummaries}
+            selectedClientTag={selectedClientTag}
+            setSelectedClientTag={setSelectedClientTag}
+            // Only the team-edition build, currently in team mode, can
+            // surface a meaningful tag picker — personal-mode rows have
+            // no client_tag, so the chip would just be confusing dead UI.
+            showClientTagFilter={
+              appModeLoaded &&
+              appModeState.edition === "team" &&
+              appModeState.mode === "team"
+            }
             onlyStarred={onlyStarred}
             setOnlyStarred={setOnlyStarred}
             selectedTags={selectedTags}

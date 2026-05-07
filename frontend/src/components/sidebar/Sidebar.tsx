@@ -15,7 +15,9 @@ import type {
   SourceSummary,
   TagSummary,
 } from "@/lib/types";
-import type { AppEdition, ProviderCapabilities } from "@/lib/mode";
+import type { AppEdition, AppMode, ProviderCapabilities } from "@/lib/mode";
+import type { ClientTagFilter } from "@/lib/clientTag";
+import { ClientTagTabs } from "./ClientTagTabs";
 import { SessionGroup } from "./SessionGroup";
 import { SidebarSearch } from "./SidebarSearch";
 import { SourceTabs } from "./SourceTabs";
@@ -36,6 +38,17 @@ interface SidebarProps {
   selectedSource: SourceFilter;
   setSelectedSource: (next: SourceFilter) => void;
   sourceSummaries: SourceSummary[];
+
+  /**
+   * Per-machine collector role filter (`server` / `frontend` / `client` /
+   * `__none__` / undefined). The control only renders when
+   * `showClientTagFilter` is true — i.e. the active provider is the
+   * remote/team one. Personal-mode rows have no tag, so showing the
+   * filter would just be misleading dead UI.
+   */
+  selectedClientTag: ClientTagFilter;
+  setSelectedClientTag: (next: ClientTagFilter) => void;
+  showClientTagFilter: boolean;
 
   onlyStarred: boolean;
   setOnlyStarred: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -72,9 +85,15 @@ interface SidebarProps {
    *  mode. Optional — defaults preserve the existing personal-mode UI. */
   capabilities?: ProviderCapabilities;
 
-  /** Build-time edition. When `team`, a small chip is shown next to the
-   *  brand so the user is never in doubt which build they launched. */
+  /** Build-time edition. Only `team` builds expose the chip + the
+   *  ModeSwitcher footer; `personal` builds keep the title bar bare so
+   *  there's no mode-y noise for end users who never see team mode. */
   edition?: AppEdition;
+
+  /** Runtime mode. Drives the brand chip's *content* on team-edition
+   *  builds (so the chip stays in sync with whatever the ModeSwitcher
+   *  shows in the sidebar footer). Ignored when edition !== "team". */
+  mode?: AppMode;
 }
 
 function Sidebar(props: SidebarProps) {
@@ -99,9 +118,13 @@ function Sidebar(props: SidebarProps) {
     selectedSource,
     setSelectedSource,
     sourceSummaries,
+    selectedClientTag,
+    setSelectedClientTag,
+    showClientTagFilter,
     footerSlot,
     capabilities,
     edition,
+    mode,
     ...searchProps
   } = props;
   const canAnnotate = capabilities?.annotations ?? true;
@@ -150,10 +173,21 @@ function Sidebar(props: SidebarProps) {
             Reunion
             {edition === "team" ? (
               <span
-                className="inline-flex items-center rounded-md bg-primary-soft px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-overline text-primary leading-none"
-                title={t("mode.teamModeBadge")}
+                className={cn(
+                  "inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-overline leading-none",
+                  mode === "team"
+                    ? "bg-primary-soft text-primary"
+                    : "bg-background-soft text-muted-foreground ring-1 ring-inset ring-border"
+                )}
+                title={
+                  mode === "team"
+                    ? t("mode.teamModeBadge")
+                    : t("mode.personalModeBadge")
+                }
               >
-                {t("mode.teamModeBadge")}
+                {mode === "team"
+                  ? t("mode.teamModeBadge")
+                  : t("mode.personalModeBadge")}
               </span>
             ) : null}
           </div>
@@ -232,6 +266,12 @@ function Sidebar(props: SidebarProps) {
             onChange={setSelectedSource}
             sources={sourceSummaries}
             totalCount={sourceSummaries.reduce((sum, item) => sum + item.session_count, 0)}
+          />
+        ) : null}
+        {showClientTagFilter ? (
+          <ClientTagTabs
+            value={selectedClientTag}
+            onChange={setSelectedClientTag}
           />
         ) : null}
         <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-overline text-muted-foreground">

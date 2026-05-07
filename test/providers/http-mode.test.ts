@@ -12,6 +12,12 @@ import { fetchJson, mkTmpDir, rmDir } from "../_helpers.js";
 import type { SourceRoots } from "../../src/types.js";
 import { LocalDataProvider } from "../../src/providers/local.js";
 import { RemoteDataProvider } from "../../src/providers/remote.js";
+import type {
+  DataSourceProvider,
+  ProviderListFilter,
+  RepoSummary,
+  SessionListResult,
+} from "../../src/providers/types.js";
 
 let baseUrl = "";
 let handle: ServerHandle | null = null;
@@ -183,5 +189,114 @@ describe("team mode — capability-gated routes return 403", () => {
     assert.equal(body.capabilities.deleteSession, false);
     assert.equal(body.capabilities.fullTextSearch, false);
     assert.equal(body.capabilities.annotations, false);
+  });
+});
+
+describe("clientTag query parameter — http-server forwards ?tag= to provider", () => {
+  // Spy provider records every filter it sees so we can assert exactly what
+  // the route handler decoded. We use a plain object literal cast to the
+  // provider interface (rather than mocking RemoteDataProvider) so the
+  // assertions stay focused on the http-server -> provider boundary.
+  type Capture = {
+    listFilters: ProviderListFilter[];
+    searchFilters: ProviderListFilter[];
+    repoFilters: Array<Pick<ProviderListFilter, "clientTag"> | undefined>;
+  };
+  let capture: Capture;
+  let spyProvider: DataSourceProvider;
+
+  before(() => {
+    capture = { listFilters: [], searchFilters: [], repoFilters: [] };
+    const empty: SessionListResult = { count: 0, results: [] };
+    spyProvider = {
+      mode: "team",
+      capabilities: {
+        annotations: false,
+        aiTagging: false,
+        smartExport: false,
+        deleteSession: false,
+        downloadJsonl: false,
+        openLocalFile: false,
+        subagents: false,
+        fullTranscript: true,
+        fullTextSearch: false,
+      },
+      async listSessions(filter) {
+        capture.listFilters.push(filter);
+        return empty;
+      },
+      async searchSessions(filter) {
+        capture.searchFilters.push(filter);
+        return empty;
+      },
+      async getSessionDetail() {
+        return null;
+      },
+      async listRepos(filter): Promise<RepoSummary[]> {
+        capture.repoFilters.push(filter);
+        return [];
+      },
+    };
+    __testing__.setActiveState({
+      mode: "team",
+      provider: spyProvider,
+      teamConfigPresent: true,
+    });
+  });
+
+  after(() => {
+    __testing__.setActiveState({
+      mode: "personal",
+      provider: new LocalDataProvider(roots),
+      teamConfigPresent: false,
+    });
+  });
+
+  it("GET /api/search?tag=server hands clientTag down into searchSessions", async () => {
+    const { status } = await fetchJson<unknown>(
+      baseUrl,
+      "/api/search?q=&tag=server"
+    );
+    assert.equal(status, 200);
+    const last = capture.searchFilters.at(-1);
+    assert.ok(last, "search handler never reached the provider");
+    assert.equal(last!.clientTag, "server");
+  });
+
+  it("GET /api/search without tag leaves clientTag undefined (does not coerce to '')", async () => {
+    const { status } = await fetchJson<unknown>(baseUrl, "/api/search?q=");
+    assert.equal(status, 200);
+    const last = capture.searchFilters.at(-1);
+    assert.ok(last);
+    assert.equal(last!.clientTag, undefined);
+  });
+
+  it("GET /api/search?tag=__none__ passes the untagged sentinel through", async () => {
+    const { status } = await fetchJson<unknown>(
+      baseUrl,
+      "/api/search?q=&tag=__none__"
+    );
+    assert.equal(status, 200);
+    const last = capture.searchFilters.at(-1);
+    assert.ok(last);
+    assert.equal(last!.clientTag, "__none__");
+  });
+
+  it("GET /api/repos?tag=client narrows the project picker", async () => {
+    const { status } = await fetchJson<unknown>(baseUrl, "/api/repos?tag=client");
+    assert.equal(status, 200);
+    const last = capture.repoFilters.at(-1);
+    assert.ok(last, "repos handler never reached the provider");
+    assert.equal(last!.clientTag, "client");
+  });
+
+  it("GET /api/repos without tag still calls listRepos (with empty filter)", async () => {
+    const { status } = await fetchJson<unknown>(baseUrl, "/api/repos");
+    assert.equal(status, 200);
+    const last = capture.repoFilters.at(-1);
+    // We currently always pass a filter object; assert clientTag is at least
+    // empty/undefined rather than a literal string.
+    assert.ok(last);
+    assert.ok(last!.clientTag === undefined || last!.clientTag === "");
   });
 });

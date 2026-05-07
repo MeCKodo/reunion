@@ -168,6 +168,11 @@ function rowToSession(row: ListRow): Session {
     title,
     filePath: undefined,
     provider: "remote",
+    // Surface clientTag to the renderer so the row chip + sidebar filter
+    // both have something to look at. Empty / missing string is preserved
+    // verbatim so the UI can route those sessions to the "未分类" bucket
+    // without having to special-case undefined-vs-"" elsewhere.
+    clientTag: typeof row.clientTag === "string" ? row.clientTag : undefined,
     startedAt: startedAt || updatedAt,
     updatedAt,
     sizeBytes: 0,
@@ -203,6 +208,8 @@ type ListRow = {
   model: string;
   /** Optional: ingest ≥ 2026-05-07 returns this; older deployments omit. */
   chatTitle?: string;
+  /** Optional: ingest ≥ 2026-05-08 returns this; older deployments omit. */
+  clientTag?: string;
   sessionStart?: string;
   sessionEnd?: string;
   lastCreatedAt: string;
@@ -312,8 +319,11 @@ export class RemoteDataProvider implements DataSourceProvider {
     };
   }
 
-  async listRepos(): Promise<RepoSummary[]> {
-    const url = this.buildUrl("/repos", {});
+  async listRepos(filter?: Pick<ProviderListFilter, "clientTag">): Promise<RepoSummary[]> {
+    const params: Record<string, string | undefined> = {
+      tag: normalizeClientTagParam(filter?.clientTag),
+    };
+    const url = this.buildUrl("/repos", params);
     const json = await this.fetchJson<ReposResponse>(url);
     return (json.items || [])
       .filter((repoUrl) => passesRepoHostAllowlist({ gitRepo: repoUrl } as ListRow))
@@ -333,6 +343,7 @@ export class RemoteDataProvider implements DataSourceProvider {
       repo: filter.repo,
       aiClient: filter.aiClient,
       model: filter.model,
+      tag: normalizeClientTagParam(filter.clientTag),
       q: filter.q,
       from: secondsToIso(filter.from),
       to: secondsToIso(filter.to),
@@ -445,4 +456,23 @@ export function parseRemoteSessionKey(sessionKey: string): string | null {
 function secondsToIso(seconds: number | undefined): string | undefined {
   if (seconds == null || seconds === 0) return undefined;
   return new Date(seconds * 1000).toISOString();
+}
+
+/**
+ * Normalise the optional `clientTag` filter into the wire-level value
+ * ingest expects on `?tag=`:
+ *   - `undefined` / `""`     → no filter (return undefined; `buildUrl`
+ *                              will drop the query parameter entirely)
+ *   - `"__none__"`            → un-tagged-only (passed through verbatim;
+ *                              ingest's three-way switch interprets
+ *                              this sentinel)
+ *   - any other non-empty val → exact-match filter (e.g. `"server"`)
+ *
+ * Trimming guards against UI components emitting `" server "` from a
+ * mis-bound input event.
+ */
+function normalizeClientTagParam(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
 }

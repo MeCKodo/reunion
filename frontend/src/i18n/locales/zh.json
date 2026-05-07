@@ -55,6 +55,18 @@
     "chatHistorySource": "对话来源"
   },
 
+  "clientTag": {
+    "label": "研发身份",
+    "filterTooltip": "按 collector 安装时选择的研发身份过滤团队会话",
+    "all": "全部身份",
+    "untagged": "未分类",
+    "values": {
+      "server": "服务端",
+      "frontend": "前端",
+      "client": "客户端"
+    }
+  },
+
   "tags": {
     "tags": "标签",
     "tagsCount": "标签 ({{count}})",

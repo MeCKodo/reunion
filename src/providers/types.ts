@@ -32,6 +32,16 @@ export type ProviderListFilter = {
   aiClient?: string;
   /** Model name; only meaningful for remote. */
   model?: string;
+  /**
+   * Per-machine collector tag — `"server"` / `"frontend"` / `"client"`,
+   * or the sentinel `"__none__"` for un-tagged sessions only. Only
+   * meaningful for the remote provider; the local provider ignores it
+   * (every local session is the developer's own work). Multi-tag UI
+   * selection is handled by the caller emitting one filter per chosen
+   * tag and merging the result lists — keeping this a single string
+   * keeps the wire format identical to ingest's `?tag=`.
+   */
+  clientTag?: string;
   from?: number;
   to?: number;
   /** Convenience for "last N days"; ignored when `from`/`to` are set. */
@@ -150,6 +160,11 @@ export interface DataSourceProvider {
   /** `null` if the session key isn't recognised by this provider. */
   getSessionDetail(sessionKey: string): Promise<SessionDetailPayload | null>;
 
-  /** Repo dropdown / sidebar feed. */
-  listRepos(): Promise<RepoSummary[]>;
+  /**
+   * Repo dropdown / sidebar feed. Optional filter mirrors `listSessions`
+   * — most callers pass `{}` for the unfiltered list, but team-mode UI
+   * may pass `{ clientTag: "server" }` to restrict the repo dropdown to
+   * repos with at least one server-tagged session.
+   */
+  listRepos(filter?: Pick<ProviderListFilter, "clientTag">): Promise<RepoSummary[]>;
 }

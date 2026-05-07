@@ -127,6 +127,9 @@ function serializeSessionRow(
     repo_path: session.repoPath,
     title: session.title,
     file_path: session.filePath,
+    // `client_tag` mirrors ingest's column verbatim. Frontend renders a
+    // chip when truthy and routes empty/undefined into the "未分类" bucket.
+    client_tag: session.clientTag,
     started_at: session.startedAt,
     updated_at: session.updatedAt,
     duration_sec: Math.max(0, session.updatedAt - session.startedAt),
@@ -168,8 +171,12 @@ async function handleStaticAsset(ctx: RouteContext): Promise<boolean> {
   return true;
 }
 
-async function handleListRepos({ res }: RouteContext) {
-  const repos = await getActiveProvider().listRepos();
+async function handleListRepos({ res, url }: RouteContext) {
+  // Mirrors `/api/search` — `?tag=server` flows through to the remote
+  // provider as `?tag=server` on ingest's `GET /repos`. Local provider
+  // ignores the param (every local session is the developer's own work).
+  const tag = url.searchParams.get("tag") || undefined;
+  const repos = await getActiveProvider().listRepos({ clientTag: tag });
   json(res, 200, {
     repos: repos.map((row) => ({
       repo: row.repo,
@@ -200,6 +207,9 @@ async function handleSearch({ res, url }: RouteContext) {
   const days = Number.parseInt(url.searchParams.get("days") || "0", 10);
   const aiClient = url.searchParams.get("aiClient") || "";
   const model = url.searchParams.get("model") || "";
+  // `tag=` mirrors ingest's `?tag=server|frontend|client|__none__`; an
+  // absent parameter means "no tag filter" (the team-mode default).
+  const tag = url.searchParams.get("tag") || undefined;
   const page = Number.parseInt(url.searchParams.get("page") || "0", 10) || undefined;
 
   const provider = getActiveProvider();
@@ -209,6 +219,7 @@ async function handleSearch({ res, url }: RouteContext) {
     source,
     aiClient,
     model,
+    clientTag: tag,
     pageSize: Number.isNaN(limitRaw) ? 100 : limitRaw,
     days: Number.isNaN(days) ? 0 : days,
     page,
@@ -265,6 +276,9 @@ async function handleSessionDetail({ res, url }: RouteContext) {
     repo_path: payload.session.repoPath,
     title: payload.session.title,
     file_path: payload.session.filePath,
+    // Mirror serializeSessionRow so the detail view can render the same
+    // chip / metadata block as the sidebar without an extra round-trip.
+    client_tag: payload.session.clientTag,
     started_at: payload.session.startedAt,
     updated_at: payload.session.updatedAt,
     duration_sec: Math.max(0, payload.session.updatedAt - payload.session.startedAt),

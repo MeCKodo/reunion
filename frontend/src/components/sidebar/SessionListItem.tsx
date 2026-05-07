@@ -13,6 +13,7 @@ import {
 } from "@/lib/format";
 import type { SearchResult, SourceId } from "@/lib/types";
 import { SOURCE_LABEL } from "@/lib/types";
+import { clientTagBadgeClass, clientTagLabel } from "@/lib/clientTag";
 
 const SOURCE_BADGE_CLASS: Record<SourceId, string> = {
   cursor: "bg-muted text-muted-foreground",
@@ -72,6 +73,25 @@ function SessionListItemImpl({
     const formatted = date.toISOString().slice(0, 10);
     return t("tags.aiTagBadgeWithDate", { date: formatted });
   }, [item.ai_tagged_at, t]);
+
+  // Only render the role chip when the row actually carries a tag — local
+  // (personal-mode) sessions and pre-tagging legacy uploads pass through
+  // an empty string and we don't want a chip claiming "untagged" on every
+  // row in personal mode.
+  const clientTagChip = item.client_tag ? (
+    <>
+      <span className="opacity-40">·</span>
+      <span
+        className={cn(
+          "inline-flex h-[15px] items-center rounded-sm px-1 text-[9.5px] font-semibold uppercase tracking-[0.06em]",
+          clientTagBadgeClass(item.client_tag)
+        )}
+        title={t("clientTag.label")}
+      >
+        {clientTagLabel(item.client_tag, t)}
+      </span>
+    </>
+  ) : null;
 
   return (
     <div
@@ -138,6 +158,7 @@ function SessionListItemImpl({
             <span className="tabular-nums">{formatDuration(item.duration_sec)}</span>
             <span className="opacity-40">·</span>
             <span className="truncate tabular-nums">{formatTsCompact(item.started_at)}</span>
+            {clientTagChip}
             {visibleTags.length > 0 ? (
               <>
                 <span className="opacity-40">·</span>

@@ -13,6 +13,14 @@ export type SearchParams = {
   days: string;
   repo: string;
   source?: SourceFilter;
+  /**
+   * Per-machine collector tag (`server` / `frontend` / `client`) or the
+   * sentinel `__none__` for legacy / untagged rows. Mapped 1:1 to the
+   * ingest `?tag=` parameter — see ai_coding_ingest internal/handler/http.go.
+   * `undefined` means "all roles" and is the only value the local
+   * (personal-mode) provider observes (it ignores this filter outright).
+   */
+  clientTag?: string;
   limit?: number;
   /**
    * Optional abort signal so the caller can cancel an in-flight search when
@@ -45,6 +53,9 @@ export async function fetchSearch(params: SearchParams): Promise<SearchResponse>
   u.searchParams.set("repo", params.repo === "all" ? "" : params.repo);
   if (params.source && params.source !== "all") {
     u.searchParams.set("source", params.source);
+  }
+  if (params.clientTag) {
+    u.searchParams.set("tag", params.clientTag);
   }
   u.searchParams.set("limit", String(params.limit ?? 300));
 
@@ -130,8 +141,10 @@ export async function deleteSession(sessionKey: string): Promise<DeleteSessionRe
   return data;
 }
 
-export async function fetchRepos(): Promise<RepoOption[]> {
-  const res = await fetch("/api/repos");
+export async function fetchRepos(opts: { clientTag?: string } = {}): Promise<RepoOption[]> {
+  const u = new URL("/api/repos", window.location.origin);
+  if (opts.clientTag) u.searchParams.set("tag", opts.clientTag);
+  const res = await fetch(u.toString());
   if (!res.ok) throw new Error(`Repos fetch failed: HTTP ${res.status}`);
   const data = await res.json();
   return (data.repos || []) as RepoOption[];

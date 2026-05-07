@@ -55,6 +55,18 @@
     "chatHistorySource": "Chat history source"
   },
 
+  "clientTag": {
+    "label": "Role",
+    "filterTooltip": "Filter team sessions by the developer role the collector was installed with",
+    "all": "All roles",
+    "untagged": "Untagged",
+    "values": {
+      "server": "Server",
+      "frontend": "Frontend",
+      "client": "Client"
+    }
+  },
+
   "tags": {
     "tags": "Tags",
     "tagsCount": "Tags ({{count}})",

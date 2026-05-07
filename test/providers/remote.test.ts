@@ -256,6 +256,150 @@ describe("providers/remote/RemoteDataProvider", () => {
     assert.match(calls[0].url, /\/repos$/);
   });
 
+  describe("clientTag filter", () => {
+    it("listSessions appends ?tag= when filter is a canonical role", async () => {
+      const { fn, calls } = makeFetchStub([
+        jsonResponse({
+          items: [],
+          page: 1,
+          pageSize: 50,
+          from: "f",
+          to: "t",
+        }),
+      ]);
+      const provider = new RemoteDataProvider({
+        baseUrl: "https://ingest.example.com",
+        token: "tok",
+        fetchFn: fn,
+      });
+      await provider.listSessions({ clientTag: "server" });
+      const url = new URL(calls[0].url);
+      assert.equal(url.searchParams.get("tag"), "server");
+    });
+
+    it("listSessions passes the __none__ sentinel through verbatim", async () => {
+      const { fn, calls } = makeFetchStub([
+        jsonResponse({ items: [], page: 1, pageSize: 50, from: "f", to: "t" }),
+      ]);
+      const provider = new RemoteDataProvider({
+        baseUrl: "https://ingest.example.com",
+        token: "tok",
+        fetchFn: fn,
+      });
+      await provider.listSessions({ clientTag: "__none__" });
+      const url = new URL(calls[0].url);
+      assert.equal(url.searchParams.get("tag"), "__none__");
+    });
+
+    it("listSessions omits ?tag= when filter is empty / undefined / whitespace", async () => {
+      const { fn, calls } = makeFetchStub([
+        jsonResponse({ items: [], page: 1, pageSize: 50, from: "f", to: "t" }),
+        jsonResponse({ items: [], page: 1, pageSize: 50, from: "f", to: "t" }),
+        jsonResponse({ items: [], page: 1, pageSize: 50, from: "f", to: "t" }),
+      ]);
+      const provider = new RemoteDataProvider({
+        baseUrl: "https://ingest.example.com",
+        token: "tok",
+        fetchFn: fn,
+      });
+      await provider.listSessions({});
+      await provider.listSessions({ clientTag: "" });
+      await provider.listSessions({ clientTag: "   " });
+      for (const call of calls) {
+        const url = new URL(call.url);
+        assert.equal(
+          url.searchParams.has("tag"),
+          false,
+          `expected no ?tag= in ${call.url}`
+        );
+      }
+    });
+
+    it("listRepos appends ?tag= so the picker tracks the active role", async () => {
+      const { fn, calls } = makeFetchStub([
+        jsonResponse({ items: ["git@a"], from: "f", to: "t" }),
+      ]);
+      const provider = new RemoteDataProvider({
+        baseUrl: "https://ingest.example.com",
+        token: "tok",
+        fetchFn: fn,
+      });
+      await provider.listRepos({ clientTag: "frontend" });
+      const url = new URL(calls[0].url);
+      assert.equal(url.searchParams.get("tag"), "frontend");
+    });
+
+    it("session row maps row.clientTag onto session.clientTag", async () => {
+      const { fn } = makeFetchStub([
+        jsonResponse({
+          items: [
+            {
+              sessionId: "tagged",
+              aiClient: "claude_code",
+              clientVersion: "0.1",
+              projectName: "demo",
+              gitRepo: "git@example.com:org/demo.git",
+              gitBranch: "main",
+              model: "claude",
+              chatTitle: "with tag",
+              clientTag: "server",
+              sessionStart: "2026-04-01T00:00:00Z",
+              sessionEnd: "2026-04-01T00:30:00Z",
+              lastCreatedAt: "2026-04-01T00:31:00Z",
+              totalDurationSec: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadTokens: 0,
+              cacheCreationTokens: 0,
+              cacheHitRate: 0,
+              promptCount: 0,
+              assistantTurns: 0,
+              toolCallsTotal: 0,
+              versionCount: 1,
+            },
+            {
+              sessionId: "untagged",
+              aiClient: "claude_code",
+              clientVersion: "0.1",
+              projectName: "demo",
+              gitRepo: "git@example.com:org/demo.git",
+              gitBranch: "main",
+              model: "claude",
+              chatTitle: "no tag",
+              sessionStart: "2026-04-01T00:00:00Z",
+              sessionEnd: "2026-04-01T00:30:00Z",
+              lastCreatedAt: "2026-04-01T00:31:00Z",
+              totalDurationSec: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadTokens: 0,
+              cacheCreationTokens: 0,
+              cacheHitRate: 0,
+              promptCount: 0,
+              assistantTurns: 0,
+              toolCallsTotal: 0,
+              versionCount: 1,
+            },
+          ],
+          page: 1,
+          pageSize: 50,
+          from: "f",
+          to: "t",
+        }),
+      ]);
+      const provider = new RemoteDataProvider({
+        baseUrl: "https://ingest.example.com",
+        token: "tok",
+        fetchFn: fn,
+      });
+      const result = await provider.listSessions({});
+      assert.equal(result.results[0].session.clientTag, "server");
+      // Empty / missing on the wire collapses to undefined so the chip
+      // renderer can use a single `if (clientTag)` gate.
+      assert.equal(result.results[1].session.clientTag, undefined);
+    });
+  });
+
   it("translates 401 to RemoteAuthError", async () => {
     const { fn } = makeFetchStub([
       new Response("nope", { status: 401 }),

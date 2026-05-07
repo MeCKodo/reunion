@@ -106,6 +106,13 @@ export type SearchResult = {
   ai_tag_set?: string[];
   /** Unix seconds; null if AI has never tagged this session. */
   ai_tagged_at?: number | null;
+  /**
+   * Per-machine collector tag — `"server"` / `"frontend"` / `"client"` (or
+   * future values). Only ever set in team mode; local-mode rows omit it.
+   * Empty / undefined = the upload had no tag (legacy data or
+   * `--preset=local` install) and gets bucketed as 未分类 in the UI.
+   */
+  client_tag?: string;
 };
 
 export type ClockAlignment = {

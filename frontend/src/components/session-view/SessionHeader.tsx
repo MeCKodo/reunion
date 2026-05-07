@@ -8,6 +8,7 @@ import type { ExportKind } from "@/lib/api";
 import type { SessionDetail, SourceId } from "@/lib/types";
 import type { ProviderCapabilities } from "@/lib/mode";
 import { SOURCE_LABEL } from "@/lib/types";
+import { clientTagBadgeClass, clientTagLabel } from "@/lib/clientTag";
 import { ExportActions } from "./ExportActions";
 import { MoreActionsMenu } from "./MoreActionsMenu";
 import { SessionTagEditor } from "./SessionTagEditor";
@@ -169,6 +170,17 @@ function SessionHeader({
         >
           {SOURCE_LABEL[detail.source]}
         </span>
+        {detail.client_tag ? (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] whitespace-nowrap",
+              clientTagBadgeClass(detail.client_tag)
+            )}
+            title={t("clientTag.label")}
+          >
+            {clientTagLabel(detail.client_tag, t)}
+          </span>
+        ) : null}
         <span
           className="inline-flex max-w-[16rem] items-center truncate rounded-sm bg-accent-soft/70 px-1.5 py-0.5 text-[10.5px] font-medium text-accent"
           title={detail.repo_path || detail.repo}

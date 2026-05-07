@@ -39,6 +39,15 @@ export type Session = {
    * `"remote"` when a session is materialised from the ingest API.
    */
   provider: SessionProvider;
+  /**
+   * Per-machine identity tag the collector was installed with — `"server"`
+   * / `"frontend"` / `"client"` (extensible). Drives the team-mode sidebar
+   * tag filter and the chip rendered next to a session row. `undefined` /
+   * `""` for un-tagged data (legacy uploads, `--preset=local` installs);
+   * the UI surfaces those in a "未分类" bucket. Always undefined for local
+   * provider sessions.
+   */
+  clientTag?: string;
   startedAt: number;
   updatedAt: number;
   sizeBytes: number;

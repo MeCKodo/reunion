@@ -166,7 +166,11 @@ export class LocalDataProvider implements DataSourceProvider {
     };
   }
 
-  async listRepos(): Promise<RepoSummary[]> {
+  // Accepts the `filter` arg purely for interface symmetry with the remote
+  // provider; local mode has no notion of clientTag (every session here is
+  // the developer's own work and is implicitly "untagged" in team-mode terms).
+  async listRepos(_filter?: { clientTag?: string }): Promise<RepoSummary[]> {
+    void _filter;
     const indexData = await loadIndex();
     return getRepos(indexData).map((row) => ({
       repo: row.repo,
