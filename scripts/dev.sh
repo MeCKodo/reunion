@@ -238,7 +238,7 @@ cmd_down() {
   (cd "$COLLECTOR_DIR" && ./install.sh --preset=prod --tag="$tag" --no-health-check >/dev/null) \
     || { err "install.sh --preset=prod --tag=$tag 失败"; exit 1; }
 
-  ok "done. hook → 线上 ingest (https://chh7v1pv.sg-fn.bytedance.net), tag=$tag"
+  ok "done. hook → 线上 ingest (https://chh7v1pv.sg-fn.tiktok-row.net), tag=$tag"
 }
 
 case "${1:-up}" in

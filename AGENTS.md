@@ -23,7 +23,7 @@ pnpm dev:down         # 收摊：停 ingest + docker compose down + 切 hook 回
                       # 加 --wipe 顺手 docker compose down -v 清 MySQL volume
 ```
 
-`pnpm dev` 会改 `~/.{claude,cursor}/analytics/config.json` 的 `apiEndpoint` 指向本机；`pnpm dev:down` 会通过 `install.sh --preset=prod` 切回线上 ingest（`https://chh7v1pv.sg-fn.bytedance.net`）。**关闭 Electron 窗口或 Ctrl+C 不会自动 cleanup**——后台 ingest + MySQL 仍在跑，hook 仍指本地；记得跑一次 `pnpm dev:down`。详见 [scripts/dev.sh](scripts/dev.sh) 顶部注释。
+`pnpm dev` 会改 `~/.{claude,cursor}/analytics/config.json` 的 `apiEndpoint` 指向本机；`pnpm dev:down` 会通过 `install.sh --preset=prod` 切回线上 ingest（`https://chh7v1pv.sg-fn.tiktok-row.net`）。**关闭 Electron 窗口或 Ctrl+C 不会自动 cleanup**——后台 ingest + MySQL 仍在跑，hook 仍指本地；记得跑一次 `pnpm dev:down`。详见 [scripts/dev.sh](scripts/dev.sh) 顶部注释。
 
 > 想用浏览器访问 UI？dev 期间另开终端跑：
 > `REUNION_TEAM_INGEST_URL=http://127.0.0.1:8080 REUNION_TEAM_INGEST_TOKEN=local-test-token pnpm run serve --port 9888`
@@ -51,7 +51,7 @@ pnpm dev:down         # 收摊：停 ingest + docker compose down + 切 hook 回
 发版机：把 secret 放到 `~/.reunion/release.env`（chmod 600），格式：
 
 ```bash
-export REUNION_BUILD_INGEST_URL="https://chh7v1pv.sg-fn.bytedance.net"
+export REUNION_BUILD_INGEST_URL="https://chh7v1pv.sg-fn.tiktok-row.net"
 export REUNION_BUILD_INGEST_TOKEN="..."   # 当前 ingest 不校验 token，留任意非空值即可
 ```
 

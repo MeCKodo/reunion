@@ -10,8 +10,8 @@
 # differ. electron-builder doesn't support YAML extends; copy/paste is
 # unavoidable.
 
-appId: com.meckodo.reunion.personal
-productName: Reunion Personal
+appId: com.meckodo.reunion
+productName: Reunion
 copyright: Copyright (c) 2026 MeCKodo
 asar: true
 

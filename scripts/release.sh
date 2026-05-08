@@ -9,7 +9,7 @@
 #   5. 输出"群里发这条"的一行命令模板
 #
 # 团队版 secret 来自 ~/.reunion/release.env（chmod 600），格式：
-#   export REUNION_BUILD_INGEST_URL="https://chh7v1pv.sg-fn.bytedance.net"
+#   export REUNION_BUILD_INGEST_URL="https://chh7v1pv.sg-fn.tiktok-row.net"
 #   export REUNION_BUILD_INGEST_TOKEN="..."   # 当前 ingest 不校验 token，留任意非空值即可
 # 没有这个文件时只能构建个人版（仍可发版）。
 #
@@ -134,10 +134,10 @@ fi
 # ---------- 构建 ----------
 # 由于 electron-builder 用了 `artifactName: ${productName}-${version}-${arch}.${ext}`，
 # 两个 edition 的 DMG 文件名都带 arch 后缀，且 productName 不同所以不会冲突。
-TEAM_DMG_ARM64="release/Reunion-${NEW_VERSION}-arm64.dmg"
-TEAM_DMG_X64="release/Reunion-${NEW_VERSION}-x64.dmg"
-PERSONAL_DMG_ARM64="release/Reunion Personal-${NEW_VERSION}-arm64.dmg"
-PERSONAL_DMG_X64="release/Reunion Personal-${NEW_VERSION}-x64.dmg"
+TEAM_DMG_ARM64="release/Reunion Lemon8-${NEW_VERSION}-arm64.dmg"
+TEAM_DMG_X64="release/Reunion Lemon8-${NEW_VERSION}-x64.dmg"
+PERSONAL_DMG_ARM64="release/Reunion-${NEW_VERSION}-arm64.dmg"
+PERSONAL_DMG_X64="release/Reunion-${NEW_VERSION}-x64.dmg"
 
 EXPECTED_DMGS=("$PERSONAL_DMG_ARM64" "$PERSONAL_DMG_X64")
 if [[ "$BUILD_TEAM" -eq 1 ]]; then
@@ -203,14 +203,14 @@ NOTES_FILE="$(mktemp -t reunion-release-notes)"
   if [[ "$BUILD_TEAM" -eq 1 ]]; then
     echo "**团队版（部门内部用，可切换团队/个人模式）**"
     echo
-    echo "- Apple Silicon (M1/M2/M3/M4): \`Reunion-${NEW_VERSION}-arm64.dmg\`"
-    echo "- Intel: \`Reunion-${NEW_VERSION}-x64.dmg\`"
+    echo "- Apple Silicon (M1/M2/M3/M4): \`Reunion Lemon8-${NEW_VERSION}-arm64.dmg\`"
+    echo "- Intel: \`Reunion Lemon8-${NEW_VERSION}-x64.dmg\`"
     echo
   fi
   echo "**个人版（外部分发，仅本地数据源）**"
   echo
-  echo "- Apple Silicon (M1/M2/M3/M4): \`Reunion Personal-${NEW_VERSION}-arm64.dmg\`"
-  echo "- Intel: \`Reunion Personal-${NEW_VERSION}-x64.dmg\`"
+  echo "- Apple Silicon (M1/M2/M3/M4): \`Reunion-${NEW_VERSION}-arm64.dmg\`"
+  echo "- Intel: \`Reunion-${NEW_VERSION}-x64.dmg\`"
   echo
   if [[ "$BUILD_TEAM" -eq 1 ]]; then
     echo "两版可并存安装（不同 appId / Dock 名）。如不确定选哪个，先装团队版。"
@@ -272,11 +272,11 @@ upload_to_gitlab() {
 
 ASSET_LINKS=()
 if [[ "$BUILD_TEAM" -eq 1 ]]; then
-  upload_to_gitlab "$TEAM_DMG_ARM64" "Reunion-${NEW_VERSION}-arm64.dmg"
-  upload_to_gitlab "$TEAM_DMG_X64"   "Reunion-${NEW_VERSION}-x64.dmg"
+  upload_to_gitlab "$TEAM_DMG_ARM64" "Reunion Lemon8-${NEW_VERSION}-arm64.dmg"
+  upload_to_gitlab "$TEAM_DMG_X64"   "Reunion Lemon8-${NEW_VERSION}-x64.dmg"
 fi
-upload_to_gitlab "$PERSONAL_DMG_ARM64" "Reunion Personal-${NEW_VERSION}-arm64.dmg"
-upload_to_gitlab "$PERSONAL_DMG_X64"   "Reunion Personal-${NEW_VERSION}-x64.dmg"
+upload_to_gitlab "$PERSONAL_DMG_ARM64" "Reunion-${NEW_VERSION}-arm64.dmg"
+upload_to_gitlab "$PERSONAL_DMG_X64"   "Reunion-${NEW_VERSION}-x64.dmg"
 
 LINKS_JSON="$(printf '[%s]' "$(IFS=,; echo "${ASSET_LINKS[*]}")")"
 

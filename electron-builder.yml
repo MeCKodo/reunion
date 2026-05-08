@@ -1,10 +1,10 @@
-appId: com.meckodo.reunion
-productName: Reunion
+appId: com.meckodo.reunion.lemon8
+productName: Reunion Lemon8
 copyright: Copyright (c) 2026 MeCKodo
 asar: true
 
-# Custom artifact filename keeps team-edition outputs distinguishable from
-# personal-edition (`Reunion Personal-...`) when both land in `release/`.
+# Custom artifact filename keeps lemon8-edition outputs distinguishable from
+# personal-edition (`Reunion-...`) when both land in `release/`.
 artifactName: ${productName}-${version}-${arch}.${ext}
 
 directories:
