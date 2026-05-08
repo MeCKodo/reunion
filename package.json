@@ -8,6 +8,8 @@
   "description": "Reunite with every AI conversation. Aggregate, search, read and export local Cursor / Claude Code / Codex agent chats.",
   "author": "MeCKodo",
   "scripts": {
+    "dev": "bash scripts/dev.sh up",
+    "dev:down": "bash scripts/dev.sh down",
     "index": "tsx src/server.ts index",
     "serve": "tsx src/server.ts serve --port 9765",
     "build:frontend": "pnpm -C frontend run build",

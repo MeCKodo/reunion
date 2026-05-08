@@ -7,8 +7,26 @@
 ```bash
 fnm use 20
 pnpm install
-pnpm run serve   # http://127.0.0.1:9765
+pnpm run serve   # http://127.0.0.1:9765 — 个人模式，不依赖任何外部服务
 ```
+
+### 全栈本地开发（推荐 dev 循环）
+
+需要同 repo 同级目录有 `ai_coding_ingest` 与 `ai_coding_collector`：
+
+```bash
+pnpm dev              # 一键起整套：(自动启 OrbStack →) MySQL + ingest + 切 hook 到 local
+                      # + pnpm run build + Electron 前台启动（独立 user-data-dir，不抢 desktop App 锁）
+                      # 期间 Cursor/Claude 的 hook 自动上报到本机 :8080，dev Electron 实时看到刚跑的会话
+pnpm dev -- --no-build  # 复用上次 dist/ 跳过 build，加快冷启动（改了代码就别加这个）
+pnpm dev:down         # 收摊：停 ingest + docker compose down + 切 hook 回线上
+                      # 加 --wipe 顺手 docker compose down -v 清 MySQL volume
+```
+
+`pnpm dev` 会改 `~/.{claude,cursor}/analytics/config.json` 的 `apiEndpoint` 指向本机；`pnpm dev:down` 会通过 `install.sh --preset=prod` 切回线上 ingest（`https://chh7v1pv.sg-fn.bytedance.net`）。**关闭 Electron 窗口或 Ctrl+C 不会自动 cleanup**——后台 ingest + MySQL 仍在跑，hook 仍指本地；记得跑一次 `pnpm dev:down`。详见 [scripts/dev.sh](scripts/dev.sh) 顶部注释。
+
+> 想用浏览器访问 UI？dev 期间另开终端跑：
+> `REUNION_TEAM_INGEST_URL=http://127.0.0.1:8080 REUNION_TEAM_INGEST_TOKEN=local-test-token pnpm run serve --port 9888`
 
 其他命令：
 - `pnpm run index` — 手动重建索引
@@ -33,8 +51,8 @@ pnpm run serve   # http://127.0.0.1:9765
 发版机：把 secret 放到 `~/.reunion/release.env`（chmod 600），格式：
 
 ```bash
-export REUNION_BUILD_INGEST_URL="https://ingest.your-team.example"
-export REUNION_BUILD_INGEST_TOKEN="..."
+export REUNION_BUILD_INGEST_URL="https://chh7v1pv.sg-fn.bytedance.net"
+export REUNION_BUILD_INGEST_TOKEN="..."   # 当前 ingest 不校验 token，留任意非空值即可
 ```
 
 `scripts/release.sh` 启动时会 source 这个文件，自动构建两个 edition × 两个 arch 共 4 份 DMG 并上传到 GitLab Release。仅需个人版时加 `--personal-only`。

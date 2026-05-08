@@ -19,7 +19,7 @@ reunion 默认从本机 Cursor / Claude Code / Codex 文件读取（个人模式
 
 | 场景 | baseUrl / token 来源 |
 | --- | --- |
-| 生产团队版 `.dmg` 双击 (`isPackaged=true`, `REUNION_EDITION=team`) | `scripts/build-electron.mjs` 在打包时通过 `REUNION_BUILD_INGEST_URL` / `REUNION_BUILD_INGEST_TOKEN` 经 esbuild `define` 注入到 bundle |
+| 生产团队版 `.dmg` 双击 (`isPackaged=true`, `REUNION_EDITION=team`) | `scripts/build-electron.mjs` 在打包时通过 `REUNION_BUILD_INGEST_URL` / `REUNION_BUILD_INGEST_TOKEN` 经 esbuild `define` 注入到 bundle。线上真实 URL 当前为 `https://chh7v1pv.sg-fn.bytedance.net`（token 服务端不校验）|
 | 生产个人版 `.dmg` 双击 (`REUNION_EDITION=personal`) | bundle 里 token 为空字符串；后端 `/api/mode` 直接 403 拒绝切团队 |
 | dev `pnpm run electron`（`isPackaged=false`） | `electron/bootstrap.cjs` 自动注入 `http://127.0.0.1:8080` + `local-test-token`，**无需手动 export** |
 | dev `pnpm run serve`（CLI，没 Electron） | 必须显式 export `REUNION_TEAM_INGEST_URL` / `REUNION_TEAM_INGEST_TOKEN`；同时如果只想测个人版 UI，可 `REUNION_EDITION=personal pnpm run serve` |

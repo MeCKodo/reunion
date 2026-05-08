@@ -9,8 +9,8 @@
 #   5. 输出"群里发这条"的一行命令模板
 #
 # 团队版 secret 来自 ~/.reunion/release.env（chmod 600），格式：
-#   export REUNION_BUILD_INGEST_URL="https://ingest.your-team.example"
-#   export REUNION_BUILD_INGEST_TOKEN="..."
+#   export REUNION_BUILD_INGEST_URL="https://chh7v1pv.sg-fn.bytedance.net"
+#   export REUNION_BUILD_INGEST_TOKEN="..."   # 当前 ingest 不校验 token，留任意非空值即可
 # 没有这个文件时只能构建个人版（仍可发版）。
 #
 # 用法：
